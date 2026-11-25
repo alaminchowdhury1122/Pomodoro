@@ -1,3 +1,3935 @@
-# start the project to track time. 
-# The main purpuse is to divide the time into blcok so that I can focus more 
+ <!-- start the project to track time.  -->
+ <!-- The main purpuse is to divide the time into blcok so that I can focus more  -->
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07060d">
+<title>Pomodoro · 25:00</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link id="favicon" rel="icon" type="image/svg+xml" href="">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@200;300;400;600&display=swap" rel="stylesheet">
+<style>
+  /* Registered so the orb colours can transition smoothly between modes */
+  @property --c1 { syntax: '<color>'; inherits: true; initial-value: #ff8a3d; }
+  @property --c2 { syntax: '<color>'; inherits: true; initial-value: #ff3d81; }
+  @property --c3 { syntax: '<color>'; inherits: true; initial-value: #8a3dff; }
+  @property --c4 { syntax: '<color>'; inherits: true; initial-value: #ffc15e; }
+
+  :root {
+    --bg: #07060d;
+    --text: #f6f3ff;
+    --muted: rgba(246, 243, 255, 0.58);
+    --size: min(84vw, 46vh, 440px);
+    --font: 'Sora', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    --c1: #ff4fa8; --c2: #8a5cff; --c3: #2f7bff; --c4: #2fe3c4;
+    transition: --c1 1.4s ease, --c2 1.4s ease, --c3 1.4s ease, --c4 1.4s ease;
+  }
+  body[data-theme="glow"] { --c1: #ff8a3d; --c2: #ff3d81; --c3: #8a3dff; --c4: #ffc15e; }
+  body[data-mode="break"] {
+    --c1: #25d9ff; --c2: #2f7bff; --c3: #12e0b0; --c4: #7fe9ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+
+  body {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: safe center;
+    gap: clamp(1.25rem, 4vh, 2.5rem);
+    padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem max(1.5rem, env(safe-area-inset-bottom));
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 48%, color-mix(in srgb, var(--c3) 16%, transparent), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ---------- Mode switch ---------- */
+  .modes {
+    display: flex;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+  }
+  .modes button {
+    font: 400 0.9rem var(--font);
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    padding: 0.6rem 1.5rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 0.3s, background 0.4s, box-shadow 0.4s;
+  }
+  .modes button:hover { color: var(--text); }
+  .modes button[aria-pressed="true"] {
+    color: #fff;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--c1) 55%, transparent), color-mix(in srgb, var(--c2) 55%, transparent));
+    box-shadow: 0 0 22px color-mix(in srgb, var(--c2) 40%, transparent);
+  }
+
+  /* ---------- Orb ---------- */
+  .stage {
+    position: relative;
+    width: var(--size);
+    height: var(--size);
+    display: grid;
+    place-items: center;
+  }
+
+  .halo {
+    position: absolute;
+    inset: -22%;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 40%, var(--c1), transparent 55%),
+      radial-gradient(circle at 65% 60%, var(--c2), transparent 55%),
+      radial-gradient(circle at 50% 50%, var(--c3), transparent 65%);
+    filter: blur(60px);
+    opacity: 0.38;
+    transition: opacity 0.8s;
+    animation: breathe 7s ease-in-out infinite;
+  }
+
+  .orb {
+    position: absolute;
+    inset: 11%;
+    border-radius: 50%;
+    overflow: hidden;
+    isolation: isolate;
+    background: #0a0614;
+    box-shadow:
+      0 0 40px color-mix(in srgb, var(--c2) 45%, transparent),
+      0 0 120px color-mix(in srgb, var(--c3) 35%, transparent),
+      inset 0 0 50px color-mix(in srgb, var(--c1) 35%, transparent);
+    transition: box-shadow 0.8s;
+  }
+
+  #orbCanvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; filter: blur(2px); }
+
+  /* Metallic prismatic outer ring + dark groove (both shrink as time runs out) */
+  .metal {
+    position: absolute; inset: 0; border-radius: 50%; padding: 5px;
+    background: conic-gradient(from 0deg, #f8fafc, var(--c1), var(--c2), var(--c3), #f8fafc);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    animation: spin 16s linear infinite;
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+  .running .metal { animation-duration: 7s; }
+  .groove {
+    position: absolute; inset: 8px; border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: radial-gradient(circle, transparent 60%, rgba(2, 3, 10, 0.84) 100%);
+    box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.9);
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+
+  /* Header, pills, toast */
+  .top { width: 100%; max-width: 54rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .brand { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
+  .brand img { width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.2); }
+  .brand small { font-weight: 300; letter-spacing: 0.06em; text-transform: none; color: var(--muted); }
+  .tools { display: flex; gap: 0.4rem; }
+  .pill {
+    font: 400 0.78rem var(--font); color: var(--muted);
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px; padding: 0.5rem 0.85rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.4rem; backdrop-filter: blur(10px);
+    transition: color 0.2s, background 0.2s, opacity 0.3s;
+  }
+  .pill:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.11); }
+  .pill:disabled { opacity: 0.3; cursor: not-allowed; }
+  .pill svg { width: 1rem; height: 1rem; }
+  .hide { display: none; }
+  .zenhint { display: none; position: fixed; left: 0; right: 0; bottom: max(1rem, env(safe-area-inset-bottom)); text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.7; pointer-events: none; }
+  /* Focus mode: only the orb and the time, scaled to the window */
+  body.zen { --size: min(92vw, 88vh); justify-content: center; gap: 0; }
+  body.zen .top, body.zen .modes, body.zen .controls, body.zen .settings, body.zen .tally, body.zen .hint { display: none; }
+  body.zen .stage { cursor: pointer; }
+  body.zen .zenhint { display: block; }
+  body.zen #time { font-size: calc(var(--size) * 0.19); }
+  body.zen #label { font-size: calc(var(--size) * 0.05); }
+  body.zen #status { font-size: calc(var(--size) * 0.035); }
+  .tally { font-size: 0.8rem; color: var(--muted); }
+  .tally b { color: var(--text); font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.07); }
+  .step button.five { font-size: 0.72rem; font-weight: 600; }
+  .toast {
+    position: fixed; left: 50%; bottom: max(1.25rem, env(safe-area-inset-bottom));
+    transform: translate(-50%, 0.5rem); opacity: 0; pointer-events: none;
+    padding: 0.55rem 1.1rem; border-radius: 999px; font-size: 0.82rem;
+    background: rgba(255, 255, 255, 0.09); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px);
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (max-width: 520px) { .pill .t, .brand small { display: none; } .pill { padding: 0.55rem 0.7rem; } }
+
+  /* Theme: Glow (soft blobs). Hidden, and not animating, while the Siri theme is on */
+  .blob {
+    position: absolute;
+    left: 15%; top: 15%;
+    width: 70%; height: 70%;
+    border-radius: 50%;
+    filter: blur(26px);
+    mix-blend-mode: screen;
+    opacity: 0.95;
+  }
+  .b1 { background: radial-gradient(circle, var(--c1), transparent 68%); animation: orbitA 6s linear infinite, morph 3.5s ease-in-out infinite alternate; }
+  .b2 { background: radial-gradient(circle, var(--c2), transparent 68%); animation: orbitB 8s linear infinite, morph 4s ease-in-out infinite alternate; }
+  .b3 { background: radial-gradient(circle, var(--c3), transparent 68%); animation: orbitA 10s linear infinite reverse, morph 4.5s ease-in-out infinite alternate-reverse; }
+  .b4 { background: radial-gradient(circle, var(--c4), transparent 68%); width: 50%; height: 50%; left: 25%; top: 25%; animation: orbitB 5.5s linear infinite reverse, morph 3s ease-in-out infinite alternate; }
+  .b5 { background: radial-gradient(circle, var(--c3), transparent 66%); width: 58%; height: 58%; left: 21%; top: 21%; animation: orbitB 7s linear -3s infinite, morph 3.8s ease-in-out -1s infinite alternate-reverse; }
+  .b6 { background: radial-gradient(circle, var(--c1), transparent 66%); width: 52%; height: 52%; left: 24%; top: 24%; animation: orbitA 8s linear -2s infinite reverse, morph 3.4s ease-in-out -2s infinite alternate; }
+
+  /* The whole fluid layer keeps turning, so the orb never sits still */
+  .swirl { position: absolute; inset: 0; animation: spin 11s linear infinite; }
+  .ribbon {
+    position: absolute;
+    inset: 8%;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--c1), var(--c2), var(--c3), var(--c4), var(--c1));
+    filter: blur(34px);
+    mix-blend-mode: screen;
+    opacity: 0.5;
+    animation: spin 6s linear infinite reverse;
+  }
+  .ribbon.r2 {
+    inset: 14%;
+    background: conic-gradient(from 180deg, var(--c3), var(--c4), var(--c2), var(--c1), var(--c3));
+    opacity: 0.4;
+    animation: spin 8s linear infinite;
+  }
+
+  .glow-layer { display: none; position: absolute; inset: 0; }
+  body[data-theme="glow"] .glow-layer { display: block; }
+  body[data-theme="glow"] #orbCanvas { display: none; }
+
+  /* Dark centre keeps the time legible over the glow */
+  .orb::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(7, 5, 14, 0.62) 0, rgba(7, 5, 14, 0.25) 42%, transparent 68%),
+      radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.22), transparent 30%);
+    pointer-events: none;
+  }
+
+  .orb { animation: wobble 5s ease-in-out infinite; }
+  .running .orb { animation: pulse 2.2s ease-in-out infinite; }
+  .running .halo { opacity: 0.7; animation: breathe 2.6s ease-in-out infinite; }
+
+  .ring {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+    overflow: visible;
+    pointer-events: none;
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .ring circle { fill: none; stroke-width: 0.9; }
+  .ring .track { stroke: rgba(255, 255, 255, 0.07); }
+  .ring .bar {
+    stroke: var(--c4);
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 2px var(--c4));
+  }
+
+  .readout {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    text-shadow: 0 2px 24px rgba(0, 0, 0, 0.55);
+  }
+  #label { font-size: clamp(1rem, 3.4vw, 1.25rem); font-weight: 400; letter-spacing: 0.04em; }
+  #time {
+    font-size: clamp(3.2rem, 15vw, 6.4rem);
+    font-weight: 200;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  #status { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; gap: 0.85rem; align-items: center; }
+  .btn {
+    font: 600 1rem var(--font);
+    border: 0;
+    cursor: pointer;
+    border-radius: 999px;
+    padding: 0.95rem 2.6rem;
+    min-width: 9.5rem;
+    color: #fff;
+    background: linear-gradient(120deg, var(--c1), var(--c2));
+    box-shadow: 0 8px 34px color-mix(in srgb, var(--c2) 50%, transparent);
+    transition: transform 0.2s, box-shadow 0.4s, filter 0.2s;
+  }
+  .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn:active { transform: scale(0.97); }
+  .btn.ghost {
+    min-width: 0;
+    padding: 0.95rem 1.7rem;
+    font-weight: 400;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+  }
+  .btn.ghost:hover { background: rgba(255, 255, 255, 0.12); }
+  .hint { font-size: 0.75rem; color: var(--muted); }
+
+  .settings { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.45rem 0.4rem 1.05rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .step .s-name { font-size: 0.85rem; color: var(--muted); }
+  .step output { min-width: 4.3rem; text-align: center; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+  .step button {
+    width: 2.2rem; height: 2.2rem;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font: 400 1.25rem/1 var(--font);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.2s, opacity 0.3s;
+  }
+  .step button:hover:not(:disabled) { background: color-mix(in srgb, var(--c2) 45%, transparent); }
+  .step button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .test {
+    font: 400 0.85rem var(--font);
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.65rem 1.1rem;
+    cursor: pointer;
+    transition: color 0.2s, opacity 0.3s;
+  }
+  .test:hover:not(:disabled) { color: var(--text); }
+  .test:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  button:focus-visible { outline: 2px solid var(--c4); outline-offset: 3px; }
+
+  /* ---------- Animations ---------- */
+  @keyframes orbitA {
+    from { transform: rotate(0deg) translateX(38%) rotate(0deg) scale(1); }
+    50%  { transform: rotate(180deg) translateX(46%) rotate(-180deg) scale(1.25); }
+    to   { transform: rotate(360deg) translateX(38%) rotate(-360deg) scale(1); }
+  }
+  @keyframes orbitB {
+    from { transform: rotate(90deg) translateX(42%) rotate(-90deg) scale(1.2); }
+    50%  { transform: rotate(270deg) translateX(22%) rotate(-270deg) scale(0.8); }
+    to   { transform: rotate(450deg) translateX(42%) rotate(-450deg) scale(1.2); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes morph {
+    0%   { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+    33%  { border-radius: 62% 38% 55% 45% / 45% 58% 42% 55%; }
+    66%  { border-radius: 40% 60% 35% 65% / 60% 40% 60% 40%; }
+    100% { border-radius: 55% 45% 60% 40% / 40% 60% 40% 60%; }
+  }
+  @keyframes wobble { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.035) rotate(5deg); } }
+  @keyframes pulse   { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+  @keyframes breathe { 0%, 100% { transform: scale(0.94); } 50% { transform: scale(1.06); } }
+  @keyframes flash   { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+  .alarm .orb { animation: flash 0.7s ease-in-out infinite; }
+
+  @media (max-width: 420px) {
+    .btn { padding: 0.9rem 1.8rem; min-width: 8rem; }
+    .hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body data-mode="focus" data-theme="siri">
+
+  <header class="top">
+    <div class="brand"><img id="logoImg" alt="Aura logo"><span>Aura <small>· Pomodoro</small></span></div>
+    <div class="tools">
+      <button class="pill" id="zen" type="button" aria-pressed="false" title="Focus mode (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><span class="t">Focus mode</span></button>
+      <button class="pill" id="theme" type="button" title="Switch theme (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor"/></svg><span class="t">Theme: <b id="theme-name">Siri</b></span></button>
+      <button class="pill" id="fs" type="button" title="Fullscreen (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="t">Full</span></button>
+      <button class="pill" id="dl-png" type="button" title="Download 512x512 PNG logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg><span class="t">Logo PNG</span></button>
+      <button class="pill" id="dl-svg" type="button" title="Download SVG logo">SVG</button>
+      <button class="pill" id="test" type="button" title="Preview the bell alarm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-4-5.7V5a2 2 0 10-4 0v.3C7.7 6.2 6 8.4 6 11v3.2c0 .5-.2 1.1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><span class="t">Bell</span></button>
+      <button class="pill" id="mute" type="button" aria-label="Mute alarm" title="Mute or unmute the alarm">
+        <svg id="ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 010 7M19 5a10 10 0 010 14"/></svg>
+        <svg id="ic-off" class="hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="modes" role="group" aria-label="Session type">
+    <button id="m-focus" type="button" aria-pressed="true">Focus</button>
+    <button id="m-break" type="button" aria-pressed="false">Break</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="halo"></div>
+    <div class="metal" aria-hidden="true"></div>
+    <div class="groove" aria-hidden="true"></div>
+    <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+      <circle class="track" cx="50" cy="50" r="46"></circle>
+      <circle class="bar" id="bar" cx="50" cy="50" r="46"></circle>
+    </svg>
+    <div class="orb">
+      <canvas id="orbCanvas"></canvas>
+      <div class="glow-layer">
+        <div class="ribbon"></div>
+        <div class="ribbon r2"></div>
+        <div class="swirl">
+          <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+          <div class="blob b4"></div><div class="blob b5"></div><div class="blob b6"></div>
+        </div>
+      </div>
+    </div>
+    <div class="readout">
+      <span id="label">Focus</span>
+      <span id="time" role="timer">25:00</span>
+      <span id="status" aria-live="polite">Ready</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="main" type="button">Start</button>
+    <button class="btn ghost" id="reset" type="button">Reset</button>
+  </div>
+  <section class="settings" aria-label="Session length">
+    <div class="step">
+      <span class="s-name">Focus</span>
+      <button type="button" class="five" data-m="focus" data-d="-5" aria-label="Decrease focus by 5 minutes">&minus;5</button>
+      <button type="button" data-m="focus" data-d="-1" aria-label="Decrease focus minutes">&minus;</button>
+      <output id="v-focus">25 min</output>
+      <button type="button" data-m="focus" data-d="1" aria-label="Increase focus minutes">+</button>
+      <button type="button" class="five" data-m="focus" data-d="5" aria-label="Increase focus by 5 minutes">+5</button>
+    </div>
+    <div class="step">
+      <span class="s-name">Break</span>
+      <button type="button" class="five" data-m="break" data-d="-5" aria-label="Decrease break by 5 minutes">&minus;5</button>
+      <button type="button" data-m="break" data-d="-1" aria-label="Decrease break minutes">&minus;</button>
+      <output id="v-break">5 min</output>
+      <button type="button" data-m="break" data-d="1" aria-label="Increase break minutes">+</button>
+      <button type="button" class="five" data-m="break" data-d="5" aria-label="Increase break by 5 minutes">+5</button>
+    </div>
+  </section>
+  <p class="tally">Completed focus sessions <b id="done">0</b></p>
+  <p class="hint">Space start/pause · R reset · F fullscreen · Z focus mode · T theme</p>
+  <p class="zenhint">Click the orb to start or pause · Z to exit · F for fullscreen</p>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const DURATION = { focus: 25 * 60 * 1000, break: 5 * 60 * 1000 };
+  const LIMITS = { focus: [1, 120], break: [1, 60] };
+  try {
+    const saved = JSON.parse(localStorage.getItem('pomodoro-minutes') || 'null');
+    if (saved) for (const m of ['focus', 'break']) {
+      const v = Math.round(Number(saved[m]));
+      if (v >= LIMITS[m][0] && v <= LIMITS[m][1]) DURATION[m] = v * 60000;
+    }
+  } catch (e) {}
+  const LABEL = { focus: 'Focus', break: 'Break' };
+  const C = 2 * Math.PI * 46;
+
+  const $ = id => document.getElementById(id);
+  const el = {
+    stage: $('stage'), time: $('time'), label: $('label'), status: $('status'),
+    main: $('main'), reset: $('reset'), bar: $('bar'),
+    mFocus: $('m-focus'), mBreak: $('m-break'), vFocus: $('v-focus'), vBreak: $('v-break'), test: $('test')
+  };
+  el.bar.style.strokeDasharray = C;
+  const doneEl = $('done');
+  let ringDone = false, ringT = null, doneCount = 0;
+  const stepBtns = document.querySelectorAll('.step button');
+
+  let mode = 'focus';
+  let remaining = DURATION.focus;
+  let endAt = 0;
+  let timer = null;
+  let running = false;
+
+  /* ---------- Alarm (Web Audio, no files needed) ---------- */
+  let ctx = null, alarm = null, alarmTimeout = null;
+
+  function unlockAudio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) ctx = new AC();
+    }
+    if (!ctx) return;
+    if (ctx.state !== 'running') ctx.resume();
+    if (!unlockAudio.primed) { // iOS needs a sound started inside a tap
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+      unlockAudio.primed = true;
+    }
+  }
+
+  let muted = false;
+  try { muted = localStorage.getItem('pomodoro-muted') === '1'; } catch (e) {}
+  const MASTER = 0.8;
+
+  // Metallic bell: three strikes ("tong, tong, tong") per round, scheduled on the audio clock
+  function buildAlarm(when, finishedMode, rounds) {
+    const master = ctx.createGain();
+    master.gain.value = muted ? 0 : MASTER;
+    master.connect(ctx.destination);
+    const base = finishedMode === 'focus' ? 523.25 : 440;
+    const strikes = [[0, base, 0.28], [0.58, base, 0.30], [1.16, base * 1.122, 0.34]];
+    const partials = [[1, 1, 1.65], [2, 0.55, 1.25], [2.41, 0.38, 0.95], [3.01, 0.28, 0.75], [4.18, 0.16, 0.45]];
+    const oscs = [];
+    for (let r = 0; r < rounds; r++) {
+      strikes.forEach(([dt, f, peak]) => {
+        const t = when + r * 3 + dt;
+        partials.forEach(([ratio, gain, decay]) => {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = f * ratio;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(peak * gain, t + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+          osc.connect(g).connect(master);
+          osc.start(t);
+          osc.stop(t + decay + 0.05);
+          oscs.push(osc);
+        });
+      });
+    }
+    return { master, oscs };
+  }
+
+  function scheduleAlarm(delayMs, finishedMode) {
+    stopAlarm();
+    if (ctx) alarm = buildAlarm(ctx.currentTime + delayMs / 1000 + 0.02, finishedMode, 3);
+  }
+
+  function stopAlarm() {
+    clearTimeout(alarmTimeout);
+    el.stage.classList.remove('alarm');
+    if (alarm && ctx) {
+      const a = alarm;
+      alarm = null;
+      try {
+        a.master.gain.cancelScheduledValues(ctx.currentTime);
+        a.master.gain.setTargetAtTime(0, ctx.currentTime, 0.03);
+        a.oscs.forEach(o => { try { o.stop(ctx.currentTime + 0.2); } catch (e) {} });
+      } catch (e) {}
+    }
+  }
+
+  /* ---------- Rendering ---------- */
+  const fmt = ms => {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  };
+
+  function render(statusText) {
+    const text = fmt(remaining);
+    el.time.textContent = text;
+    el.label.textContent = LABEL[mode];
+    document.title = text + ' · ' + LABEL[mode];
+    document.body.dataset.mode = mode;
+    el.mFocus.setAttribute('aria-pressed', mode === 'focus');
+    el.mBreak.setAttribute('aria-pressed', mode === 'break');
+    el.stage.classList.toggle('running', running);
+
+    // Rings drain and shrink as time runs out, then vanish when a session ends
+    const f = ringDone ? 0 : Math.max(0, Math.min(1, remaining / DURATION[mode]));
+    el.bar.style.strokeDashoffset = C * (1 - f);
+    el.stage.style.setProperty('--ring-scale', ringDone ? '0.55' : (0.68 + 0.32 * f).toFixed(4));
+    el.stage.style.setProperty('--ring-op', ringDone ? '0' : Math.max(0.18, Math.min(1, 0.25 + 0.75 * f)).toFixed(4));
+    doneEl.textContent = doneCount;
+
+    const started = remaining < DURATION[mode];
+    el.main.textContent = running ? 'Pause' : started ? 'Resume' : 'Start';
+    el.vFocus.textContent = DURATION.focus / 60000 + ' min';
+    el.vBreak.textContent = DURATION.break / 60000 + ' min';
+    stepBtns.forEach(b => { b.disabled = running; });
+    el.test.disabled = running;
+    if (statusText) el.status.textContent = statusText;
+  }
+
+  /* ---------- Timer logic ---------- */
+  function tick() {
+    remaining = endAt - Date.now();
+    if (remaining <= 0) return complete();
+    render();
+  }
+
+  function start() {
+    unlockAudio();
+    askNotify();
+    ringDone = false;
+    endAt = Date.now() + remaining;
+    scheduleAlarm(remaining, mode);
+    running = true;
+    clearInterval(timer);
+    timer = setInterval(tick, 200);
+    render(mode === 'focus' ? 'Stay with one thing' : 'Rest your eyes');
+  }
+
+  function pause() {
+    stopAlarm();
+    remaining = Math.max(0, endAt - Date.now());
+    running = false;
+    clearInterval(timer);
+    render('Paused');
+  }
+
+  function resetTimer() {
+    stopAlarm();
+    ringDone = false;
+    running = false;
+    clearInterval(timer);
+    remaining = DURATION[mode];
+    render('Ready');
+  }
+
+  function setMode(next) {
+    if (next === mode && !running && remaining === DURATION[mode]) return;
+    mode = next;
+    resetTimer();
+  }
+
+  function complete() {
+    const finished = mode;
+    running = false;
+    clearInterval(timer);
+    if (finished === 'focus') doneCount++;
+    ringDone = true;
+    clearTimeout(ringT);
+    ringT = setTimeout(() => { ringDone = false; render(); }, 2200);
+    mode = finished === 'focus' ? 'break' : 'focus';
+    remaining = DURATION[mode];
+    render(finished === 'focus' ? 'Focus done · tap to silence' : 'Break done · tap to silence');
+    notifyDone(finished);
+    // Normally the chime was already scheduled at Start; rebuild it only if that did not work
+    if (!(alarm && ctx && ctx.state === 'running')) {
+      unlockAudio();
+      stopAlarm();
+      if (ctx) alarm = buildAlarm(ctx.currentTime + 0.05, finished, 3);
+    }
+    el.stage.classList.add('alarm');
+    clearTimeout(alarmTimeout);
+    alarmTimeout = setTimeout(stopAlarm, 9500);
+    if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 400]);
+  }
+
+  /* ---------- Session length ---------- */
+  function adjust(m, d) {
+    if (running) return;
+    const [lo, hi] = LIMITS[m];
+    const v = Math.min(hi, Math.max(lo, DURATION[m] / 60000 + d));
+    if (v * 60000 === DURATION[m]) return;
+    DURATION[m] = v * 60000;
+    try {
+      localStorage.setItem('pomodoro-minutes', JSON.stringify({ focus: DURATION.focus / 60000, break: DURATION.break / 60000 }));
+    } catch (e) {}
+    if (m === mode) { stopAlarm(); remaining = DURATION[m]; render('Ready'); } else render();
+  }
+
+  // Hold a button to keep stepping
+  let holdT = null, holdI = null;
+  const stopHold = () => { clearTimeout(holdT); clearInterval(holdI); };
+  stepBtns.forEach(b => {
+    const go = () => adjust(b.dataset.m, Number(b.dataset.d));
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      go();
+      holdT = setTimeout(() => { holdI = setInterval(go, 90); }, 420);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, stopHold));
+    b.addEventListener('click', e => { if (e.detail === 0) go(); }); // keyboard
+  });
+  window.addEventListener('blur', stopHold);
+
+  /* ---------- Events ---------- */
+  el.main.addEventListener('click', () => (running ? pause() : start()));
+  el.reset.addEventListener('click', resetTimer);
+  el.mFocus.addEventListener('click', () => { unlockAudio(); setMode('focus'); });
+  el.mBreak.addEventListener('click', () => { unlockAudio(); setMode('break'); });
+
+  document.addEventListener('keydown', e => {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Space' && e.target.tagName !== 'BUTTON') {
+      e.preventDefault();
+      running ? pause() : start();
+    } else if (e.key.toLowerCase() === 'r') {
+      resetTimer();
+    } else if (e.key.toLowerCase() === 'f') {
+      toggleFullscreen();
+    } else if (e.key.toLowerCase() === 'z') {
+      toggleZen();
+    } else if (e.key.toLowerCase() === 't') {
+      toggleTheme();
+    } else if (e.key === 'Escape' && document.body.classList.contains('zen') && !document.fullscreenElement) {
+      setZen(false);
+    }
+  });
+
+  el.test.addEventListener('click', () => {
+    if (running) return;
+    if (muted) { muted = false; paintMute(); }
+    unlockAudio();
+    stopAlarm();
+    if (ctx) alarm = buildAlarm(ctx.currentTime + 0.05, mode, 1);
+    toast('Playing bell: Tong Tong Tong');
+  });
+  el.stage.addEventListener('click', () => {
+    if (alarm || el.stage.classList.contains('alarm')) { stopAlarm(); el.status.textContent = 'Ready'; }
+    else if (document.body.classList.contains('zen')) { running ? pause() : start(); }
+  });
+  el.stage.addEventListener('dblclick', () => toggleFullscreen());
+  document.addEventListener('pointerdown', unlockAudio, { passive: true });
+
+  // Catch up immediately when returning to a backgrounded tab
+  document.addEventListener('visibilitychange', () => { if (running) tick(); });
+
+  /* ---------- Toast, logo export, mute ---------- */
+  const toastEl = $('toast');
+  let toastT = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  function logoSVG() {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f8fafc"/><stop offset="35%" stop-color="#ff4fa8"/><stop offset="70%" stop-color="#8a5cff"/><stop offset="100%" stop-color="#2f7bff"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8369a"/><stop offset="0.5" stop-color="#4a2cb4"/><stop offset="1" stop-color="#1d4fe0"/></linearGradient>
+    <radialGradient id="teal" cx="84%" cy="62%" r="60%"><stop offset="0" stop-color="#19c8aa" stop-opacity="0.8"/><stop offset="1" stop-color="#19c8aa" stop-opacity="0"/></radialGradient>
+    <radialGradient id="vig" cx="50%" cy="50%" r="50%"><stop offset="0.55" stop-color="#040512" stop-opacity="0"/><stop offset="1" stop-color="#040512" stop-opacity="0.8"/></radialGradient>
+    <linearGradient id="p1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#ff4cb0" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="p2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#28e6be" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="p3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#50a0ff" stop-opacity="0.05"/></linearGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff" stop-opacity="0.85"/><stop offset="1" stop-color="#bef0ff" stop-opacity="0"/></radialGradient>
+    <clipPath id="clip"><circle cx="256" cy="256" r="204"/></clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="246" fill="#040409"/>
+  <circle cx="256" cy="256" r="236" fill="none" stroke="url(#rg)" stroke-width="14"/>
+  <g clip-path="url(#clip)">
+    <rect x="52" y="52" width="408" height="408" fill="url(#bg)"/>
+    <rect x="52" y="52" width="408" height="408" fill="url(#teal)"/>
+    <rect x="52" y="52" width="408" height="408" fill="url(#vig)"/>
+    <g style="mix-blend-mode:screen">
+      <path d="M256 256 C 290 270, 330 400, 346 440 C 300 410, 250 330, 256 256 Z" fill="url(#p1)" transform="rotate(8 256 256)"/>
+      <path d="M256 256 C 330 230, 400 240, 450 262 C 400 300, 320 296, 256 256 Z" fill="url(#p2)"/>
+      <path d="M256 256 C 230 190, 250 120, 290 80 C 310 140, 290 210, 256 256 Z" fill="url(#p3)"/>
+      <path d="M256 256 C 190 240, 130 250, 70 300 C 130 320, 210 300, 256 256 Z" fill="url(#p3)" opacity="0.8"/>
+    </g>
+    <circle cx="256" cy="256" r="60" fill="url(#core)"/>
+  </g>
+</svg>`;
+  }
+  const logoURI = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(logoSVG());
+  $('logoImg').src = logoURI;
+  $('favicon').href = logoURI;
+
+  function saveFile(url, name) {
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $('dl-svg').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
+    saveFile(url, 'aura-siri-orb-logo.svg');
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast('Downloaded aura-siri-orb-logo.svg');
+  });
+  $('dl-png').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 512;
+      c.getContext('2d').drawImage(img, 0, 0, 512, 512);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => {
+        if (!b) return;
+        const u = URL.createObjectURL(b);
+        saveFile(u, 'aura-siri-orb-logo-512x512.png');
+        setTimeout(() => URL.revokeObjectURL(u), 1500);
+        toast('Downloaded 512×512 PNG logo');
+      }, 'image/png');
+    };
+    img.src = url;
+  });
+
+  function paintMute() {
+    $('ic-on').classList.toggle('hide', muted);
+    $('ic-off').classList.toggle('hide', !muted);
+    $('mute').setAttribute('aria-pressed', muted);
+  }
+  $('mute').addEventListener('click', () => {
+    muted = !muted;
+    try { localStorage.setItem('pomodoro-muted', muted ? '1' : '0'); } catch (e) {}
+    if (alarm) alarm.master.gain.value = muted ? 0 : MASTER;
+    paintMute();
+    toast(muted ? 'Alarm sound muted' : 'Alarm sound on');
+  });
+  paintMute();
+
+  /* ---------- Focus mode, fullscreen, desktop notifications ---------- */
+  function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } catch (e) {}
+  }
+  function setZen(on) {
+    document.body.classList.toggle('zen', on);
+    $('zen').setAttribute('aria-pressed', on);
+  }
+  function toggleZen() { setZen(!document.body.classList.contains('zen')); }
+  $('zen').addEventListener('click', toggleZen);
+  $('fs').addEventListener('click', toggleFullscreen);
+
+  function askNotify() {
+    try {
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    } catch (e) {}
+  }
+  function notifyDone(finished) {
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'granted' || document.hasFocus()) return;
+      const n = new Notification(finished === 'focus' ? 'Focus session done' : 'Break is over', {
+        body: finished === 'focus' ? 'Nice work. Take a ' + DURATION.break / 60000 + ' min break.' : 'Ready for the next focus session?',
+        icon: logoURI,
+        tag: 'aura-pomodoro'
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch (e) {}
+  }
+
+  /* ---------- Theme switch (Siri / Glow) ---------- */
+  const THEMES = { siri: 'Siri', glow: 'Glow' };
+  let theme = 'siri';
+  try { const t = localStorage.getItem('pomodoro-theme'); if (THEMES[t]) theme = t; } catch (e) {}
+  function applyTheme() {
+    document.body.dataset.theme = theme;
+    $('theme-name').textContent = THEMES[theme];
+    try { localStorage.setItem('pomodoro-theme', theme); } catch (e) {}
+  }
+  function toggleTheme() {
+    theme = theme === 'siri' ? 'glow' : 'siri';
+    applyTheme();
+    toast('Theme: ' + THEMES[theme]);
+  }
+  $('theme').addEventListener('click', toggleTheme);
+  applyTheme();
+
+  /* ---------- Siri-style orb (canvas) ---------- */
+  const SIRI = {
+    focus: {
+      bg: ['#d8369a', '#4a2cb4', '#1d4fe0'], left: 'rgba(40, 110, 255, 0.55)', right: 'rgba(25, 200, 170, 0.55)',
+      petals: ['255,76,176', '40,230,190', '240,248,255', '80,150,255', '160,110,255', '110,225,255', '236,60,170', '230,240,255']
+    },
+    break: {
+      bg: ['#12b5c8', '#1f5fd6', '#2a35b8'], left: 'rgba(60, 120, 255, 0.55)', right: 'rgba(30, 220, 190, 0.55)',
+      petals: ['60,235,215', '60,170,255', '240,250,255', '90,130,255', '130,120,255', '120,235,255', '40,200,230', '230,245,255']
+    }<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07060d">
+<title>Pomodoro · 25:00</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link id="favicon" rel="icon" type="image/svg+xml" href="">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@200;300;400;600&display=swap" rel="stylesheet">
+<style>
+  /* Registered so the orb colours can transition smoothly between modes */
+  @property --c1 { syntax: '<color>'; inherits: true; initial-value: #ff8a3d; }
+  @property --c2 { syntax: '<color>'; inherits: true; initial-value: #ff3d81; }
+  @property --c3 { syntax: '<color>'; inherits: true; initial-value: #8a3dff; }
+  @property --c4 { syntax: '<color>'; inherits: true; initial-value: #ffc15e; }
+
+  :root {
+    --bg: #07060d;
+    --text: #f6f3ff;
+    --muted: rgba(246, 243, 255, 0.58);
+    --size: min(84vw, 46vh, 440px);
+    --font: 'Sora', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    --c1: #ff4fa8; --c2: #8a5cff; --c3: #2f7bff; --c4: #2fe3c4;
+    transition: --c1 1.4s ease, --c2 1.4s ease, --c3 1.4s ease, --c4 1.4s ease;
+  }
+  body[data-theme="glow"] { --c1: #ff8a3d; --c2: #ff3d81; --c3: #8a3dff; --c4: #ffc15e; }
+  body[data-mode="break"] {
+    --c1: #25d9ff; --c2: #2f7bff; --c3: #12e0b0; --c4: #7fe9ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+
+  body {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: safe center;
+    gap: clamp(1.25rem, 4vh, 2.5rem);
+    padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem max(1.5rem, env(safe-area-inset-bottom));
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 48%, color-mix(in srgb, var(--c3) 16%, transparent), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ---------- Mode switch ---------- */
+  .modes {
+    display: flex;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+  }
+  .modes button {
+    font: 400 0.9rem var(--font);
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    padding: 0.6rem 1.5rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 0.3s, background 0.4s, box-shadow 0.4s;
+  }
+  .modes button:hover { color: var(--text); }
+  .modes button[aria-pressed="true"] {
+    color: #fff;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--c1) 55%, transparent), color-mix(in srgb, var(--c2) 55%, transparent));
+    box-shadow: 0 0 22px color-mix(in srgb, var(--c2) 40%, transparent);
+  }
+
+  /* ---------- Orb ---------- */
+  .stage {
+    position: relative;
+    width: var(--size);
+    height: var(--size);
+    display: grid;
+    place-items: center;
+  }
+
+  .halo {
+    position: absolute;
+    inset: -22%;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 40%, var(--c1), transparent 55%),
+      radial-gradient(circle at 65% 60%, var(--c2), transparent 55%),
+      radial-gradient(circle at 50% 50%, var(--c3), transparent 65%);
+    filter: blur(60px);
+    opacity: 0.38;
+    transition: opacity 0.8s;
+    animation: breathe 7s ease-in-out infinite;
+  }
+
+  .orb {
+    position: absolute;
+    inset: 11%;
+    border-radius: 50%;
+    overflow: hidden;
+    isolation: isolate;
+    background: #0a0614;
+    box-shadow:
+      0 0 40px color-mix(in srgb, var(--c2) 45%, transparent),
+      0 0 120px color-mix(in srgb, var(--c3) 35%, transparent),
+      inset 0 0 50px color-mix(in srgb, var(--c1) 35%, transparent);
+    transition: box-shadow 0.8s;
+  }
+
+  #orbCanvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; filter: blur(2px); }
+
+  /* Metallic prismatic outer ring + dark groove (both shrink as time runs out) */
+  .metal {
+    position: absolute; inset: 0; border-radius: 50%; padding: 5px;
+    background: conic-gradient(from 0deg, #f8fafc, var(--c1), var(--c2), var(--c3), #f8fafc);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    animation: spin 16s linear infinite;
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+  .running .metal { animation-duration: 7s; }
+  .groove {
+    position: absolute; inset: 8px; border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: radial-gradient(circle, transparent 60%, rgba(2, 3, 10, 0.84) 100%);
+    box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.9);
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+
+  /* Header, pills, toast */
+  .top { width: 100%; max-width: 54rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .brand { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
+  .brand img { width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.2); }
+  .brand small { font-weight: 300; letter-spacing: 0.06em; text-transform: none; color: var(--muted); }
+  .tools { display: flex; gap: 0.4rem; }
+  .pill {
+    font: 400 0.78rem var(--font); color: var(--muted);
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px; padding: 0.5rem 0.85rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.4rem; backdrop-filter: blur(10px);
+    transition: color 0.2s, background 0.2s, opacity 0.3s;
+  }
+  .pill:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.11); }
+  .pill:disabled { opacity: 0.3; cursor: not-allowed; }
+  .pill svg { width: 1rem; height: 1rem; }
+  .hide { display: none; }
+  .zenhint { display: none; position: fixed; left: 0; right: 0; bottom: max(1rem, env(safe-area-inset-bottom)); text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.7; pointer-events: none; }
+  /* Focus mode: only the orb and the time, scaled to the window */
+  body.zen { --size: min(92vw, 88vh); justify-content: center; gap: 0; }
+  body.zen .top, body.zen .modes, body.zen .controls, body.zen .settings, body.zen .tally, body.zen .hint { display: none; }
+  body.zen .stage { cursor: pointer; }
+  body.zen .zenhint { display: block; }
+  body.zen #time { font-size: calc(var(--size) * 0.19); }
+  body.zen #label { font-size: calc(var(--size) * 0.05); }
+  body.zen #status { font-size: calc(var(--size) * 0.035); }
+  .tally { font-size: 0.8rem; color: var(--muted); }
+  .tally b { color: var(--text); font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.07); }
+  .step button.five { font-size: 0.72rem; font-weight: 600; }
+  .toast {
+    position: fixed; left: 50%; bottom: max(1.25rem, env(safe-area-inset-bottom));
+    transform: translate(-50%, 0.5rem); opacity: 0; pointer-events: none;
+    padding: 0.55rem 1.1rem; border-radius: 999px; font-size: 0.82rem;
+    background: rgba(255, 255, 255, 0.09); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px);
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (max-width: 520px) { .pill .t, .brand small { display: none; } .pill { padding: 0.55rem 0.7rem; } }
+
+  /* Theme: Glow (soft blobs). Hidden, and not animating, while the Siri theme is on */
+  .blob {
+    position: absolute;
+    left: 15%; top: 15%;
+    width: 70%; height: 70%;
+    border-radius: 50%;
+    filter: blur(26px);
+    mix-blend-mode: screen;
+    opacity: 0.95;
+  }
+  .b1 { background: radial-gradient(circle, var(--c1), transparent 68%); animation: orbitA 6s linear infinite, morph 3.5s ease-in-out infinite alternate; }
+  .b2 { background: radial-gradient(circle, var(--c2), transparent 68%); animation: orbitB 8s linear infinite, morph 4s ease-in-out infinite alternate; }
+  .b3 { background: radial-gradient(circle, var(--c3), transparent 68%); animation: orbitA 10s linear infinite reverse, morph 4.5s ease-in-out infinite alternate-reverse; }
+  .b4 { background: radial-gradient(circle, var(--c4), transparent 68%); width: 50%; height: 50%; left: 25%; top: 25%; animation: orbitB 5.5s linear infinite reverse, morph 3s ease-in-out infinite alternate; }
+  .b5 { background: radial-gradient(circle, var(--c3), transparent 66%); width: 58%; height: 58%; left: 21%; top: 21%; animation: orbitB 7s linear -3s infinite, morph 3.8s ease-in-out -1s infinite alternate-reverse; }
+  .b6 { background: radial-gradient(circle, var(--c1), transparent 66%); width: 52%; height: 52%; left: 24%; top: 24%; animation: orbitA 8s linear -2s infinite reverse, morph 3.4s ease-in-out -2s infinite alternate; }
+
+  /* The whole fluid layer keeps turning, so the orb never sits still */
+  .swirl { position: absolute; inset: 0; animation: spin 11s linear infinite; }
+  .ribbon {
+    position: absolute;
+    inset: 8%;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--c1), var(--c2), var(--c3), var(--c4), var(--c1));
+    filter: blur(34px);
+    mix-blend-mode: screen;
+    opacity: 0.5;
+    animation: spin 6s linear infinite reverse;
+  }
+  .ribbon.r2 {
+    inset: 14%;
+    background: conic-gradient(from 180deg, var(--c3), var(--c4), var(--c2), var(--c1), var(--c3));
+    opacity: 0.4;
+    animation: spin 8s linear infinite;
+  }
+
+  .glow-layer { display: none; position: absolute; inset: 0; }
+  body[data-theme="glow"] .glow-layer { display: block; }
+  body[data-theme="glow"] #orbCanvas { display: none; }
+
+  /* Dark centre keeps the time legible over the glow */
+  .orb::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(7, 5, 14, 0.62) 0, rgba(7, 5, 14, 0.25) 42%, transparent 68%),
+      radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.22), transparent 30%);
+    pointer-events: none;
+  }
+
+  .orb { animation: wobble 5s ease-in-out infinite; }
+  .running .orb { animation: pulse 2.2s ease-in-out infinite; }
+  .running .halo { opacity: 0.7; animation: breathe 2.6s ease-in-out infinite; }
+
+  .ring {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+    overflow: visible;
+    pointer-events: none;
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .ring circle { fill: none; stroke-width: 0.9; }
+  .ring .track { stroke: rgba(255, 255, 255, 0.07); }
+  .ring .bar {
+    stroke: var(--c4);
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 2px var(--c4));
+  }
+
+  .readout {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    text-shadow: 0 2px 24px rgba(0, 0, 0, 0.55);
+  }
+  #label { font-size: clamp(1rem, 3.4vw, 1.25rem); font-weight: 400; letter-spacing: 0.04em; }
+  #time {
+    font-size: clamp(3.2rem, 15vw, 6.4rem);
+    font-weight: 200;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  #status { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; gap: 0.85rem; align-items: center; }
+  .btn {
+    font: 600 1rem var(--font);
+    border: 0;
+    cursor: pointer;
+    border-radius: 999px;
+    padding: 0.95rem 2.6rem;
+    min-width: 9.5rem;
+    color: #fff;
+    background: linear-gradient(120deg, var(--c1), var(--c2));
+    box-shadow: 0 8px 34px color-mix(in srgb, var(--c2) 50%, transparent);
+    transition: transform 0.2s, box-shadow 0.4s, filter 0.2s;
+  }
+  .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn:active { transform: scale(0.97); }
+  .btn.ghost {
+    min-width: 0;
+    padding: 0.95rem 1.7rem;
+    font-weight: 400;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+  }
+  .btn.ghost:hover { background: rgba(255, 255, 255, 0.12); }
+  .hint { font-size: 0.75rem; color: var(--muted); }
+
+  .settings { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.45rem 0.4rem 1.05rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .step .s-name { font-size: 0.85rem; color: var(--muted); }
+  .step output { min-width: 4.3rem; text-align: center; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+  .step button {
+    width: 2.2rem; height: 2.2rem;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font: 400 1.25rem/1 var(--font);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.2s, opacity 0.3s;
+  }
+  .step button:hover:not(:disabled) { background: color-mix(in srgb, var(--c2) 45%, transparent); }
+  .step button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .test {
+    font: 400 0.85rem var(--font);
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.65rem 1.1rem;
+    cursor: pointer;
+    transition: color 0.2s, opacity 0.3s;
+  }
+  .test:hover:not(:disabled) { color: var(--text); }
+  .test:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  button:focus-visible { outline: 2px solid var(--c4); outline-offset: 3px; }
+
+  /* ---------- Animations ---------- */
+  @keyframes orbitA {
+    from { transform: rotate(0deg) translateX(38%) rotate(0deg) scale(1); }
+    50%  { transform: rotate(180deg) translateX(46%) rotate(-180deg) scale(1.25); }
+    to   { transform: rotate(360deg) translateX(38%) rotate(-360deg) scale(1); }
+  }
+  @keyframes orbitB {
+    from { transform: rotate(90deg) translateX(42%) rotate(-90deg) scale(1.2); }
+    50%  { transform: rotate(270deg) translateX(22%) rotate(-270deg) scale(0.8); }
+    to   { transform: rotate(450deg) translateX(42%) rotate(-450deg) scale(1.2); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes morph {
+    0%   { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+    33%  { border-radius: 62% 38% 55% 45% / 45% 58% 42% 55%; }
+    66%  { border-radius: 40% 60% 35% 65% / 60% 40% 60% 40%; }
+    100% { border-radius: 55% 45% 60% 40% / 40% 60% 40% 60%; }
+  }
+  @keyframes wobble { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.035) rotate(5deg); } }
+  @keyframes pulse   { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+  @keyframes breathe { 0%, 100% { transform: scale(0.94); } 50% { transform: scale(1.06); } }
+  @keyframes flash   { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+  .alarm .orb { animation: flash 0.7s ease-in-out infinite; }
+
+  @media (max-width: 420px) {
+    .btn { padding: 0.9rem 1.8rem; min-width: 8rem; }
+    .hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body data-mode="focus" data-theme="siri">
+
+  <header class="top">
+    <div class="brand"><img id="logoImg" alt="Aura logo"><span>Aura <small>· Pomodoro</small></span></div>
+    <div class="tools">
+      <button class="pill" id="zen" type="button" aria-pressed="false" title="Focus mode (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><span class="t">Focus mode</span></button>
+      <button class="pill" id="theme" type="button" title="Switch theme (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor"/></svg><span class="t">Theme: <b id="theme-name">Siri</b></span></button>
+      <button class="pill" id="fs" type="button" title="Fullscreen (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="t">Full</span></button>
+      <button class="pill" id="dl-png" type="button" title="Download 512x512 PNG logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg><span class="t">Logo PNG</span></button>
+      <button class="pill" id="dl-svg" type="button" title="Download SVG logo">SVG</button>
+      <button class="pill" id="test" type="button" title="Preview the bell alarm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-4-5.7V5a2 2 0 10-4 0v.3C7.7 6.2 6 8.4 6 11v3.2c0 .5-.2 1.1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><span class="t">Bell</span></button>
+      <button class="pill" id="mute" type="button" aria-label="Mute alarm" title="Mute or unmute the alarm">
+        <svg id="ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 010 7M19 5a10 10 0 010 14"/></svg>
+        <svg id="ic-off" class="hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="modes" role="group" aria-label="Session type">
+    <button id="m-focus" type="button" aria-pressed="true">Focus</button>
+    <button id="m-break" type="button" aria-pressed="false">Break</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="halo"></div>
+    <div class="metal" aria-hidden="true"></div>
+    <div class="groove" aria-hidden="true"></div>
+    <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+      <circle class="track" cx="50" cy="50" r="46"></circle>
+      <circle class="bar" id="bar" cx="50" cy="50" r="46"></circle>
+    </svg>
+    <div class="orb">
+      <canvas id="orbCanvas"></canvas>
+      <div class="glow-layer">
+        <div class="ribbon"></div>
+        <div class="ribbon r2"></div>
+        <div class="swirl">
+          <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+          <div class="blob b4"></div><div class="blob b5"></div><div class="blob b6"></div>
+        </div>
+      </div>
+    </div>
+    <div class="readout">
+      <span id="label">Focus</span>
+      <span id="time" role="timer">25:00</span>
+      <span id="status" aria-live="polite">Ready</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="main" type="button">Start</button>
+    <button class="btn ghost" id="reset" type="button">Reset</button>
+  </div>
+  <section class="settings" aria-label="Session length">
+    <div class="step">
+      <span class="s-name">Focus</span>
+      <button type="button" class="five" data-m="focus" data-d="-5" aria-label="Decrease focus by 5 minutes">&minus;5</button>
+      <button type="button" data-m="focus" data-d="-1" aria-label="Decrease focus minutes">&minus;</button>
+      <output id="v-focus">25 min</output>
+      <button type="button" data-m="focus" data-d="1" aria-label="Increase focus minutes">+</button>
+      <button type="button" class="five" data-m="focus" data-d="5" aria-label="Increase focus by 5 minutes">+5</button>
+    </div>
+    <div class="step">
+      <span class="s-name">Break</span>
+      <button type="button" class="five" data-m="break" data-d="-5" aria-label="Decrease break by 5 minutes">&minus;5</button>
+      <button type="button" data-m="break" data-d="-1" aria-label="Decrease break minutes">&minus;</button>
+      <output id="v-break">5 min</output>
+      <button type="button" data-m="break" data-d="1" aria-label="Increase break minutes">+</button>
+      <button type="button" class="five" data-m="break" data-d="5" aria-label="Increase break by 5 minutes">+5</button>
+    </div>
+  </section>
+  <p class="tally">Completed focus sessions <b id="done">0</b></p>
+  <p class="hint">Space start/pause · R reset · F fullscreen · Z focus mode · T theme</p>
+  <p class="zenhint">Click the orb to start or pause · Z to exit · F for fullscreen</p>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const DURATION = { focus: 25 * 60 * 1000, break: 5 * 60 * 1000 };
+  const LIMITS = { focus: [1, 120], break: [1, 60] };
+  try {
+    const saved = JSON.parse(localStorage.getItem('pomodoro-minutes') || 'null');
+    if (saved) for (const m of ['focus', 'break']) {
+      const v = Math.round(Number(saved[m]));
+      if (v >= LIMITS[m][0] && v <= LIMITS[m][1]) DURATION[m] = v * 60000;
+    }
+  } catch (e) {}
+  const LABEL = { focus: 'Focus', break: 'Break' };
+  const C = 2 * Math.PI * 46;
+
+  const $ = id => document.getElementById(id);
+  const el = {
+    stage: $('stage'), time: $('time'), label: $('label'), status: $('status'),
+    main: $('main'), reset: $('reset'), bar: $('bar'),
+    mFocus: $('m-focus'), mBreak: $('m-break'), vFocus: $('v-focus'), vBreak: $('v-break'), test: $('test')
+  };
+  el.bar.style.strokeDasharray = C;
+  const doneEl = $('done');
+  let ringDone = false, ringT = null, doneCount = 0;
+  const stepBtns = document.querySelectorAll('.step button');
+
+  let mode = 'focus';
+  let remaining = DURATION.focus;
+  let endAt = 0;
+  let timer = null;
+  let running = false;
+
+  /* ---------- Alarm (Web Audio, no files needed) ---------- */
+  let ctx = null, alarm = null, alarmTimeout = null;
+
+  function unlockAudio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) ctx = new AC();
+    }
+    if (!ctx) return;
+    if (ctx.state !== 'running') ctx.resume();
+    if (!unlockAudio.primed) { // iOS needs a sound started inside a tap
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+      unlockAudio.primed = true;
+    }
+  }
+
+  let muted = false;
+  try { muted = localStorage.getItem('pomodoro-muted') === '1'; } catch (e) {}
+  const MASTER = 0.8;
+
+  // Metallic bell: three strikes ("tong, tong, tong") per round, scheduled on the audio clock
+  function buildAlarm(when, finishedMode, rounds) {
+    const master = ctx.createGain();
+    master.gain.value = muted ? 0 : MASTER;
+    master.connect(ctx.destination);
+    const base = finishedMode === 'focus' ? 523.25 : 440;
+    const strikes = [[0, base, 0.28], [0.58, base, 0.30], [1.16, base * 1.122, 0.34]];
+    const partials = [[1, 1, 1.65], [2, 0.55, 1.25], [2.41, 0.38, 0.95], [3.01, 0.28, 0.75], [4.18, 0.16, 0.45]];
+    const oscs = [];
+    for (let r = 0; r < rounds; r++) {
+      strikes.forEach(([dt, f, peak]) => {
+        const t = when + r * 3 + dt;
+        partials.forEach(([ratio, gain, decay]) => {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = f * ratio;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(peak * gain, t + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+          osc.connect(g).connect(master);
+          osc.start(t);
+          osc.stop(t + decay + 0.05);
+          oscs.push(osc);
+        });
+      });
+    }
+    return { master, oscs };
+  }
+
+  function scheduleAlarm(delayMs, finishedMode) {
+    stopAlarm();
+    if (ctx) alarm = buildAlarm(ctx.currentTime + delayMs / 1000 + 0.02, finishedMode, 3);
+  }
+
+  function stopAlarm() {
+    clearTimeout(alarmTimeout);
+    el.stage.classList.remove('alarm');
+    if (alarm && ctx) {
+      const a = alarm;
+      alarm = null;
+      try {
+        a.master.gain.cancelScheduledValues(ctx.currentTime);
+        a.master.gain.setTargetAtTime(0, ctx.currentTime, 0.03);
+        a.oscs.forEach(o => { try { o.stop(ctx.currentTime + 0.2); } catch (e) {} });
+      } catch (e) {}
+    }
+  }
+
+  /* ---------- Rendering ---------- */
+  const fmt = ms => {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  };
+
+  function render(statusText) {
+    const text = fmt(remaining);
+    el.time.textContent = text;
+    el.label.textContent = LABEL[mode];
+    document.title = text + ' · ' + LABEL[mode];
+    document.body.dataset.mode = mode;
+    el.mFocus.setAttribute('aria-pressed', mode === 'focus');
+    el.mBreak.setAttribute('aria-pressed', mode === 'break');
+    el.stage.classList.toggle('running', running);
+
+    // Rings drain and shrink as time runs out, then vanish when a session ends
+    const f = ringDone ? 0 : Math.max(0, Math.min(1, remaining / DURATION[mode]));
+    el.bar.style.strokeDashoffset = C * (1 - f);
+    el.stage.style.setProperty('--ring-scale', ringDone ? '0.55' : (0.68 + 0.32 * f).toFixed(4));
+    el.stage.style.setProperty('--ring-op', ringDone ? '0' : Math.max(0.18, Math.min(1, 0.25 + 0.75 * f)).toFixed(4));
+    doneEl.textContent = doneCount;
+
+    const started = remaining < DURATION[mode];
+    el.main.textContent = running ? 'Pause' : started ? 'Resume' : 'Start';
+    el.vFocus.textContent = DURATION.focus / 60000 + ' min';
+    el.vBreak.textContent = DURATION.break / 60000 + ' min';
+    stepBtns.forEach(b => { b.disabled = running; });
+    el.test.disabled = running;
+    if (statusText) el.status.textContent = statusText;
+  }
+
+  /* ---------- Timer logic ---------- */
+  function tick() {
+    remaining = endAt - Date.now();
+    if (remaining <= 0) return complete();
+    render();
+  }
+
+  function start() {
+    unlockAudio();
+    askNotify();
+    ringDone = false;
+    endAt = Date.now() + remaining;
+    scheduleAlarm(remaining, mode);
+    running = true;
+    clearInterval(timer);
+    timer = setInterval(tick, 200);
+    render(mode === 'focus' ? 'Stay with one thing' : 'Rest your eyes');
+  }
+
+  function pause() {
+    stopAlarm();
+    remaining = Math.max(0, endAt - Date.now());
+    running = false;
+    clearInterval(timer);
+    render('Paused');
+  }
+
+  function resetTimer() {
+    stopAlarm();
+    ringDone = false;
+    running = false;
+    clearInterval(timer);
+    remaining = DURATION[mode];
+    render('Ready');
+  }
+
+  function setMode(next) {
+    if (next === mode && !running && remaining === DURATION[mode]) return;
+    mode = next;
+    resetTimer();
+  }
+
+  function complete() {
+    const finished = mode;
+    running = false;
+    clearInterval(timer);
+    if (finished === 'focus') doneCount++;
+    ringDone = true;
+    clearTimeout(ringT);
+    ringT = setTimeout(() => { ringDone = false; render(); }, 2200);
+    mode = finished === 'focus' ? 'break' : 'focus';
+    remaining = DURATION[mode];
+    render(finished === 'focus' ? 'Focus done · tap to silence' : 'Break done · tap to silence');
+    notifyDone(finished);
+    // Normally the chime was already scheduled at Start; rebuild it only if that did not work
+    if (!(alarm && ctx && ctx.state === 'running')) {
+      unlockAudio();
+      stopAlarm();
+      if (ctx) alarm = buildAlarm(ctx.currentTime + 0.05, finished, 3);
+    }
+    el.stage.classList.add('alarm');
+    clearTimeout(alarmTimeout);
+    alarmTimeout = setTimeout(stopAlarm, 9500);
+    if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 400]);
+  }
+
+  /* ---------- Session length ---------- */
+  function adjust(m, d) {
+    if (running) return;
+    const [lo, hi] = LIMITS[m];
+    const v = Math.min(hi, Math.max(lo, DURATION[m] / 60000 + d));
+    if (v * 60000 === DURATION[m]) return;
+    DURATION[m] = v * 60000;
+    try {
+      localStorage.setItem('pomodoro-minutes', JSON.stringify({ focus: DURATION.focus / 60000, break: DURATION.break / 60000 }));
+    } catch (e) {}
+    if (m === mode) { stopAlarm(); remaining = DURATION[m]; render('Ready'); } else render();
+  }
+
+  // Hold a button to keep stepping
+  let holdT = null, holdI = null;
+  const stopHold = () => { clearTimeout(holdT); clearInterval(holdI); };
+  stepBtns.forEach(b => {
+    const go = () => adjust(b.dataset.m, Number(b.dataset.d));
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      go();
+      holdT = setTimeout(() => { holdI = setInterval(go, 90); }, 420);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, stopHold));
+    b.addEventListener('click', e => { if (e.detail === 0) go(); }); // keyboard
+  });
+  window.addEventListener('blur', stopHold);
+
+  /* ---------- Events ---------- */
+  el.main.addEventListener('click', () => (running ? pause() : start()));
+  el.reset.addEventListener('click', resetTimer);
+  el.mFocus.addEventListener('click', () => { unlockAudio(); setMode('focus'); });
+  el.mBreak.addEventListener('click', () => { unlockAudio(); setMode('break'); });
+
+  document.addEventListener('keydown', e => {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Space' && e.target.tagName !== 'BUTTON') {
+      e.preventDefault();
+      running ? pause() : start();
+    } else if (e.key.toLowerCase() === 'r') {
+      resetTimer();
+    } else if (e.key.toLowerCase() === 'f') {
+      toggleFullscreen();
+    } else if (e.key.toLowerCase() === 'z') {
+      toggleZen();
+    } else if (e.key.toLowerCase() === 't') {
+      toggleTheme();
+    } else if (e.key === 'Escape' && document.body.classList.contains('zen') && !document.fullscreenElement) {
+      setZen(false);
+    }
+  });
+
+  el.test.addEventListener('click', () => {
+    if (running) return;
+    if (muted) { muted = false; paintMute(); }
+    unlockAudio();
+    stopAlarm();
+    if (ctx) alarm = buildAlarm(ctx.currentTime + 0.05, mode, 1);
+    toast('Playing bell: Tong Tong Tong');
+  });
+  el.stage.addEventListener('click', () => {
+    if (alarm || el.stage.classList.contains('alarm')) { stopAlarm(); el.status.textContent = 'Ready'; }
+    else if (document.body.classList.contains('zen')) { running ? pause() : start(); }
+  });
+  el.stage.addEventListener('dblclick', () => toggleFullscreen());
+  document.addEventListener('pointerdown', unlockAudio, { passive: true });
+
+  // Catch up immediately when returning to a backgrounded tab
+  document.addEventListener('visibilitychange', () => { if (running) tick(); });
+
+  /* ---------- Toast, logo export, mute ---------- */
+  const toastEl = $('toast');
+  let toastT = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  function logoSVG() {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f8fafc"/><stop offset="35%" stop-color="#ff4fa8"/><stop offset="70%" stop-color="#8a5cff"/><stop offset="100%" stop-color="#2f7bff"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8369a"/><stop offset="0.5" stop-color="#4a2cb4"/><stop offset="1" stop-color="#1d4fe0"/></linearGradient>
+    <radialGradient id="teal" cx="84%" cy="62%" r="60%"><stop offset="0" stop-color="#19c8aa" stop-opacity="0.8"/><stop offset="1" stop-color="#19c8aa" stop-opacity="0"/></radialGradient>
+    <radialGradient id="vig" cx="50%" cy="50%" r="50%"><stop offset="0.55" stop-color="#040512" stop-opacity="0"/><stop offset="1" stop-color="#040512" stop-opacity="0.8"/></radialGradient>
+    <linearGradient id="p1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#ff4cb0" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="p2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#28e6be" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="p3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#50a0ff" stop-opacity="0.05"/></linearGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff" stop-opacity="0.85"/><stop offset="1" stop-color="#bef0ff" stop-opacity="0"/></radialGradient>
+    <clipPath id="clip"><circle cx="256" cy="256" r="204"/></clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="246" fill="#040409"/>
+  <circle cx="256" cy="256" r="236" fill="none" stroke="url(#rg)" stroke-width="14"/>
+  <g clip-path="url(#clip)">
+    <rect x="52" y="52" width="408" height="408" fill="url(#bg)"/>
+    <rect x="52" y="52" width="408" height="408" fill="url(#teal)"/>
+    <rect x="52" y="52" width="408" height="408" fill="url(#vig)"/>
+    <g style="mix-blend-mode:screen">
+      <path d="M256 256 C 290 270, 330 400, 346 440 C 300 410, 250 330, 256 256 Z" fill="url(#p1)" transform="rotate(8 256 256)"/>
+      <path d="M256 256 C 330 230, 400 240, 450 262 C 400 300, 320 296, 256 256 Z" fill="url(#p2)"/>
+      <path d="M256 256 C 230 190, 250 120, 290 80 C 310 140, 290 210, 256 256 Z" fill="url(#p3)"/>
+      <path d="M256 256 C 190 240, 130 250, 70 300 C 130 320, 210 300, 256 256 Z" fill="url(#p3)" opacity="0.8"/>
+    </g>
+    <circle cx="256" cy="256" r="60" fill="url(#core)"/>
+  </g>
+</svg>`;
+  }
+  const logoURI = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(logoSVG());
+  $('logoImg').src = logoURI;
+  $('favicon').href = logoURI;
+
+  function saveFile(url, name) {
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $('dl-svg').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
+    saveFile(url, 'aura-siri-orb-logo.svg');
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast('Downloaded aura-siri-orb-logo.svg');
+  });
+  $('dl-png').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 512;
+      c.getContext('2d').drawImage(img, 0, 0, 512, 512);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => {
+        if (!b) return;
+        const u = URL.createObjectURL(b);
+        saveFile(u, 'aura-siri-orb-logo-512x512.png');
+        setTimeout(() => URL.revokeObjectURL(u), 1500);
+        toast('Downloaded 512×512 PNG logo');
+      }, 'image/png');
+    };
+    img.src = url;
+  });
+
+  function paintMute() {
+    $('ic-on').classList.toggle('hide', muted);
+    $('ic-off').classList.toggle('hide', !muted);
+    $('mute').setAttribute('aria-pressed', muted);
+  }
+  $('mute').addEventListener('click', () => {
+    muted = !muted;
+    try { localStorage.setItem('pomodoro-muted', muted ? '1' : '0'); } catch (e) {}
+    if (alarm) alarm.master.gain.value = muted ? 0 : MASTER;
+    paintMute();
+    toast(muted ? 'Alarm sound muted' : 'Alarm sound on');
+  });
+  paintMute();
+
+  /* ---------- Focus mode, fullscreen, desktop notifications ---------- */
+  function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } catch (e) {}
+  }
+  function setZen(on) {
+    document.body.classList.toggle('zen', on);
+    $('zen').setAttribute('aria-pressed', on);
+  }
+  function toggleZen() { setZen(!document.body.classList.contains('zen')); }
+  $('zen').addEventListener('click', toggleZen);
+  $('fs').addEventListener('click', toggleFullscreen);
+
+  function askNotify() {
+    try {
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    } catch (e) {}
+  }
+  function notifyDone(finished) {
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'granted' || document.hasFocus()) return;
+      const n = new Notification(finished === 'focus' ? 'Focus session done' : 'Break is over', {
+        body: finished === 'focus' ? 'Nice work. Take a ' + DURATION.break / 60000 + ' min break.' : 'Ready for the next focus session?',
+        icon: logoURI,
+        tag: 'aura-pomodoro'
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch (e) {}
+  }
+
+  /* ---------- Theme switch (Siri / Glow) ---------- */
+  const THEMES = { siri: 'Siri', glow: 'Glow' };
+  let theme = 'siri';
+  try { const t = localStorage.getItem('pomodoro-theme'); if (THEMES[t]) theme = t; } catch (e) {}
+  function applyTheme() {
+    document.body.dataset.theme = theme;
+    $('theme-name').textContent = THEMES[theme];
+    try { localStorage.setItem('pomodoro-theme', theme); } catch (e) {}
+  }
+  function toggleTheme() {
+    theme = theme === 'siri' ? 'glow' : 'siri';
+    applyTheme();
+    toast('Theme: ' + THEMES[theme]);
+  }
+  $('theme').addEventListener('click', toggleTheme);
+  applyTheme();
+
+  /* ---------- Siri-style orb (canvas) ---------- */
+  const SIRI = {
+    focus: {
+      bg: ['#d8369a', '#4a2cb4', '#1d4fe0'], left: 'rgba(40, 110, 255, 0.55)', right: 'rgba(25, 200, 170, 0.55)',
+      petals: ['255,76,176', '40,230,190', '240,248,255', '80,150,255', '160,110,255', '110,225,255', '236,60,170', '230,240,255']
+    },
+    break: {
+      bg: ['#12b5c8', '#1f5fd6', '#2a35b8'], left: 'rgba(60, 120, 255, 0.55)', right: 'rgba(30, 220, 190, 0.55)',
+      petals: ['60,235,215', '60,170,255', '240,250,255', '90,130,255', '130,120,255', '120,235,255', '40,200,230', '230,245,255']
+    }
+  };
+  // a = angle (rad), L = length & w = width (fraction of radius), spin = rad/frame
+  const PETALS = [
+    { a: 1.45, L: 0.95, w: 0.12, spin: 0.0011, ph: 0.0 },
+    { a: 0.10, L: 0.85, w: 0.13, spin: -0.0014, ph: 1.1 },
+    { a: -1.15, L: 0.80, w: 0.09, spin: 0.0018, ph: 2.0 },
+    { a: 2.45, L: 0.85, w: 0.14, spin: -0.0012, ph: 3.2 },
+    { a: -2.50, L: 0.80, w: 0.20, spin: 0.0009, ph: 4.1 },
+    { a: -0.45, L: 0.70, w: 0.10, spin: 0.0021, ph: 5.0 },
+    { a: -1.70, L: 0.75, w: 0.15, spin: -0.0016, ph: 0.7 },
+    { a: 3.10, L: 0.65, w: 0.08, spin: 0.0015, ph: 2.6 }
+  ];
+
+  const canvas = $('orbCanvas');
+  const gfx = canvas.getContext('2d');
+  const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let clock = 120, energy = 0.6;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07060d">
+<title>Pomodoro · 25:00</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link id="favicon" rel="icon" type="image/svg+xml" href="">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@200;300;400;600&display=swap" rel="stylesheet">
+<style>
+  /* Registered so the orb colours can transition smoothly between modes */
+  @property --c1 { syntax: '<color>'; inherits: true; initial-value: #ff8a3d; }
+  @property --c2 { syntax: '<color>'; inherits: true; initial-value: #ff3d81; }
+  @property --c3 { syntax: '<color>'; inherits: true; initial-value: #8a3dff; }
+  @property --c4 { syntax: '<color>'; inherits: true; initial-value: #ffc15e; }
+
+  :root {
+    --bg: #07060d;
+    --text: #f6f3ff;
+    --muted: rgba(246, 243, 255, 0.58);
+    --size: min(84vw, 46vh, 440px);
+    --font: 'Sora', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    --c1: #ff4fa8; --c2: #8a5cff; --c3: #2f7bff; --c4: #2fe3c4;
+    transition: --c1 1.4s ease, --c2 1.4s ease, --c3 1.4s ease, --c4 1.4s ease;
+  }
+  body[data-theme="glow"] { --c1: #ff8a3d; --c2: #ff3d81; --c3: #8a3dff; --c4: #ffc15e; }
+  body[data-mode="break"] {
+    --c1: #25d9ff; --c2: #2f7bff; --c3: #12e0b0; --c4: #7fe9ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+
+  body {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: safe center;
+    gap: clamp(1.25rem, 4vh, 2.5rem);
+    padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem max(1.5rem, env(safe-area-inset-bottom));
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 48%, color-mix(in srgb, var(--c3) 16%, transparent), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ---------- Mode switch ---------- */
+  .modes {
+    display: flex;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+  }
+  .modes button {
+    font: 400 0.9rem var(--font);
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    padding: 0.6rem 1.5rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 0.3s, background 0.4s, box-shadow 0.4s;
+  }
+  .modes button:hover { color: var(--text); }
+  .modes button[aria-pressed="true"] {
+    color: #fff;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--c1) 55%, transparent), color-mix(in srgb, var(--c2) 55%, transparent));
+    box-shadow: 0 0 22px color-mix(in srgb, var(--c2) 40%, transparent);
+  }
+
+  /* ---------- Orb ---------- */
+  .stage {
+    position: relative;
+    width: var(--size);
+    height: var(--size);
+    display: grid;
+    place-items: center;
+  }
+
+  .halo {
+    position: absolute;
+    inset: -22%;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 40%, var(--c1), transparent 55%),
+      radial-gradient(circle at 65% 60%, var(--c2), transparent 55%),
+      radial-gradient(circle at 50% 50%, var(--c3), transparent 65%);
+    filter: blur(60px);
+    opacity: 0.38;
+    transition: opacity 0.8s;
+    animation: breathe 7s ease-in-out infinite;
+  }
+
+  .orb {
+    position: absolute;
+    inset: 11%;
+    border-radius: 50%;
+    overflow: hidden;
+    isolation: isolate;
+    background: #0a0614;
+    box-shadow:
+      0 0 40px color-mix(in srgb, var(--c2) 45%, transparent),
+      0 0 120px color-mix(in srgb, var(--c3) 35%, transparent),
+      inset 0 0 50px color-mix(in srgb, var(--c1) 35%, transparent);
+    transition: box-shadow 0.8s;
+  }
+
+  #orbCanvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; filter: blur(2px); }
+
+  /* Metallic prismatic outer ring + dark groove (both shrink as time runs out) */
+  .metal {
+    position: absolute; inset: 0; border-radius: 50%; padding: 5px;
+    background: conic-gradient(from 0deg, #f8fafc, var(--c1), var(--c2), var(--c3), #f8fafc);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    animation: spin 16s linear infinite;
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+  .running .metal { animation-duration: 7s; }
+  .groove {
+    position: absolute; inset: 8px; border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: radial-gradient(circle, transparent 60%, rgba(2, 3, 10, 0.84) 100%);
+    box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.9);
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+
+  /* Header, pills, toast */
+  .top { width: 100%; max-width: 54rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .brand { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
+  .brand img { width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.2); }
+  .brand small { font-weight: 300; letter-spacing: 0.06em; text-transform: none; color: var(--muted); }
+  .tools { display: flex; gap: 0.4rem; }
+  .pill {
+    font: 400 0.78rem var(--font); color: var(--muted);
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px; padding: 0.5rem 0.85rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.4rem; backdrop-filter: blur(10px);
+    transition: color 0.2s, background 0.2s, opacity 0.3s;
+  }
+  .pill:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.11); }
+  .pill:disabled { opacity: 0.3; cursor: not-allowed; }
+  .pill svg { width: 1rem; height: 1rem; }
+  .hide { display: none; }
+  .zenhint { display: none; position: fixed; left: 0; right: 0; bottom: max(1rem, env(safe-area-inset-bottom)); text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.7; pointer-events: none; }
+  /* Focus mode: only the orb and the time, scaled to the window */
+  body.zen { --size: min(92vw, 88vh); justify-content: center; gap: 0; }
+  body.zen .top, body.zen .modes, body.zen .controls, body.zen .settings, body.zen .tally, body.zen .hint { display: none; }
+  body.zen .stage { cursor: pointer; }
+  body.zen .zenhint { display: block; }
+  body.zen #time { font-size: calc(var(--size) * 0.19); }
+  body.zen #label { font-size: calc(var(--size) * 0.05); }
+  body.zen #status { font-size: calc(var(--size) * 0.035); }
+  .tally { font-size: 0.8rem; color: var(--muted); }
+  .tally b { color: var(--text); font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.07); }
+  .step button.five { font-size: 0.72rem; font-weight: 600; }
+  .toast {
+    position: fixed; left: 50%; bottom: max(1.25rem, env(safe-area-inset-bottom));
+    transform: translate(-50%, 0.5rem); opacity: 0; pointer-events: none;
+    padding: 0.55rem 1.1rem; border-radius: 999px; font-size: 0.82rem;
+    background: rgba(255, 255, 255, 0.09); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px);
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (max-width: 520px) { .pill .t, .brand small { display: none; } .pill { padding: 0.55rem 0.7rem; } }
+
+  /* Theme: Glow (soft blobs). Hidden, and not animating, while the Siri theme is on */
+  .blob {
+    position: absolute;
+    left: 15%; top: 15%;
+    width: 70%; height: 70%;
+    border-radius: 50%;
+    filter: blur(26px);
+    mix-blend-mode: screen;
+    opacity: 0.95;
+  }
+  .b1 { background: radial-gradient(circle, var(--c1), transparent 68%); animation: orbitA 6s linear infinite, morph 3.5s ease-in-out infinite alternate; }
+  .b2 { background: radial-gradient(circle, var(--c2), transparent 68%); animation: orbitB 8s linear infinite, morph 4s ease-in-out infinite alternate; }
+  .b3 { background: radial-gradient(circle, var(--c3), transparent 68%); animation: orbitA 10s linear infinite reverse, morph 4.5s ease-in-out infinite alternate-reverse; }
+  .b4 { background: radial-gradient(circle, var(--c4), transparent 68%); width: 50%; height: 50%; left: 25%; top: 25%; animation: orbitB 5.5s linear infinite reverse, morph 3s ease-in-out infinite alternate; }
+  .b5 { background: radial-gradient(circle, var(--c3), transparent 66%); width: 58%; height: 58%; left: 21%; top: 21%; animation: orbitB 7s linear -3s infinite, morph 3.8s ease-in-out -1s infinite alternate-reverse; }
+  .b6 { background: radial-gradient(circle, var(--c1), transparent 66%); width: 52%; height: 52%; left: 24%; top: 24%; animation: orbitA 8s linear -2s infinite reverse, morph 3.4s ease-in-out -2s infinite alternate; }
+
+  /* The whole fluid layer keeps turning, so the orb never sits still */
+  .swirl { position: absolute; inset: 0; animation: spin 11s linear infinite; }
+  .ribbon {
+    position: absolute;
+    inset: 8%;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--c1), var(--c2), var(--c3), var(--c4), var(--c1));
+    filter: blur(34px);
+    mix-blend-mode: screen;
+    opacity: 0.5;
+    animation: spin 6s linear infinite reverse;
+  }
+  .ribbon.r2 {
+    inset: 14%;
+    background: conic-gradient(from 180deg, var(--c3), var(--c4), var(--c2), var(--c1), var(--c3));
+    opacity: 0.4;
+    animation: spin 8s linear infinite;
+  }
+
+  .glow-layer { display: none; position: absolute; inset: 0; }
+  body[data-theme="glow"] .glow-layer { display: block; }
+  body[data-theme="glow"] #orbCanvas { display: none; }
+
+  /* Dark centre keeps the time legible over the glow */
+  .orb::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(7, 5, 14, 0.62) 0, rgba(7, 5, 14, 0.25) 42%, transparent 68%),
+      radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.22), transparent 30%);
+    pointer-events: none;
+  }
+
+  .orb { animation: wobble 5s ease-in-out infinite; }
+  .running .orb { animation: pulse 2.2s ease-in-out infinite; }
+  .running .halo { opacity: 0.7; animation: breathe 2.6s ease-in-out infinite; }
+
+  .ring {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+    overflow: visible;
+    pointer-events: none;
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .ring circle { fill: none; stroke-width: 0.9; }
+  .ring .track { stroke: rgba(255, 255, 255, 0.07); }
+  .ring .bar {
+    stroke: var(--c4);
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 2px var(--c4));
+  }
+
+  .readout {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    text-shadow: 0 2px 24px rgba(0, 0, 0, 0.55);
+  }
+  #label { font-size: clamp(1rem, 3.4vw, 1.25rem); font-weight: 400; letter-spacing: 0.04em; }
+  #time {
+    font-size: clamp(3.2rem, 15vw, 6.4rem);
+    font-weight: 200;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  #status { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; gap: 0.85rem; align-items: center; }
+  .btn {
+    font: 600 1rem var(--font);
+    border: 0;
+    cursor: pointer;
+    border-radius: 999px;
+    padding: 0.95rem 2.6rem;
+    min-width: 9.5rem;
+    color: #fff;
+    background: linear-gradient(120deg, var(--c1), var(--c2));
+    box-shadow: 0 8px 34px color-mix(in srgb, var(--c2) 50%, transparent);
+    transition: transform 0.2s, box-shadow 0.4s, filter 0.2s;
+  }
+  .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn:active { transform: scale(0.97); }
+  .btn.ghost {
+    min-width: 0;
+    padding: 0.95rem 1.7rem;
+    font-weight: 400;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+  }
+  .btn.ghost:hover { background: rgba(255, 255, 255, 0.12); }
+  .hint { font-size: 0.75rem; color: var(--muted); }
+
+  .settings { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.45rem 0.4rem 1.05rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .step .s-name { font-size: 0.85rem; color: var(--muted); }
+  .step output { min-width: 4.3rem; text-align: center; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+  .step button {
+    width: 2.2rem; height: 2.2rem;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font: 400 1.25rem/1 var(--font);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.2s, opacity 0.3s;
+  }
+  .step button:hover:not(:disabled) { background: color-mix(in srgb, var(--c2) 45%, transparent); }
+  .step button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .test {
+    font: 400 0.85rem var(--font);
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.65rem 1.1rem;
+    cursor: pointer;
+    transition: color 0.2s, opacity 0.3s;
+  }
+  .test:hover:not(:disabled) { color: var(--text); }
+  .test:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  button:focus-visible { outline: 2px solid var(--c4); outline-offset: 3px; }
+
+  /* ---------- Animations ---------- */
+  @keyframes orbitA {
+    from { transform: rotate(0deg) translateX(38%) rotate(0deg) scale(1); }
+    50%  { transform: rotate(180deg) translateX(46%) rotate(-180deg) scale(1.25); }
+    to   { transform: rotate(360deg) translateX(38%) rotate(-360deg) scale(1); }
+  }
+  @keyframes orbitB {
+    from { transform: rotate(90deg) translateX(42%) rotate(-90deg) scale(1.2); }
+    50%  { transform: rotate(270deg) translateX(22%) rotate(-270deg) scale(0.8); }
+    to   { transform: rotate(450deg) translateX(42%) rotate(-450deg) scale(1.2); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes morph {
+    0%   { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+    33%  { border-radius: 62% 38% 55% 45% / 45% 58% 42% 55%; }
+    66%  { border-radius: 40% 60% 35% 65% / 60% 40% 60% 40%; }
+    100% { border-radius: 55% 45% 60% 40% / 40% 60% 40% 60%; }
+  }
+  @keyframes wobble { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.035) rotate(5deg); } }
+  @keyframes pulse   { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+  @keyframes breathe { 0%, 100% { transform: scale(0.94); } 50% { transform: scale(1.06); } }
+  @keyframes flash   { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+  .alarm .orb { animation: flash 0.7s ease-in-out infinite; }
+
+  @media (max-width: 420px) {
+    .btn { padding: 0.9rem 1.8rem; min-width: 8rem; }
+    .hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body data-mode="focus" data-theme="siri">
+
+  <header class="top">
+    <div class="brand"><img id="logoImg" alt="Aura logo"><span>Aura <small>· Pomodoro</small></span></div>
+    <div class="tools">
+      <button class="pill" id="zen" type="button" aria-pressed="false" title="Focus mode (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><span class="t">Focus mode</span></button>
+      <button class="pill" id="theme" type="button" title="Switch theme (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor"/></svg><span class="t">Theme: <b id="theme-name">Siri</b></span></button>
+      <button class="pill" id="fs" type="button" title="Fullscreen (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="t">Full</span></button>
+      <button class="pill" id="dl-png" type="button" title="Download 512x512 PNG logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg><span class="t">Logo PNG</span></button>
+      <button class="pill" id="dl-svg" type="button" title="Download SVG logo">SVG</button>
+      <button class="pill" id="test" type="button" title="Preview the bell alarm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-4-5.7V5a2 2 0 10-4 0v.3C7.7 6.2 6 8.4 6 11v3.2c0 .5-.2 1.1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><span class="t">Bell</span></button>
+      <button class="pill" id="mute" type="button" aria-label="Mute alarm" title="Mute or unmute the alarm">
+        <svg id="ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 010 7M19 5a10 10 0 010 14"/></svg>
+        <svg id="ic-off" class="hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="modes" role="group" aria-label="Session type">
+    <button id="m-focus" type="button" aria-pressed="true">Focus</button>
+    <button id="m-break" type="button" aria-pressed="false">Break</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="halo"></div>
+    <div class="metal" aria-hidden="true"></div>
+    <div class="groove" aria-hidden="true"></div>
+    <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+      <circle class="track" cx="50" cy="50" r="46"></circle>
+      <circle class="bar" id="bar" cx="50" cy="50" r="46"></circle>
+    </svg>
+    <div class="orb">
+      <canvas id="orbCanvas"></canvas>
+      <div class="glow-layer">
+        <div class="ribbon"></div>
+        <div class="ribbon r2"></div>
+        <div class="swirl">
+          <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+          <div class="blob b4"></div><div class="blob b5"></div><div class="blob b6"></div>
+        </div>
+      </div>
+    </div>
+    <div class="readout">
+      <span id="label">Focus</span>
+      <span id="time" role="timer">25:00</span>
+      <span id="status" aria-live="polite">Ready</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="main" type="button">Start</button>
+    <button class="btn ghost" id="reset" type="button">Reset</button>
+  </div>
+  <section class="settings" aria-label="Session length">
+    <div class="step">
+      <span class="s-name">Focus</span>
+      <button type="button" class="five" data-m="focus" data-d="-5" aria-label="Decrease focus by 5 minutes">&minus;5</button>
+      <button type="button" data-m="focus" data-d="-1" aria-label="Decrease focus minutes">&minus;</button>
+      <output id="v-focus">25 min</output>
+      <button type="button" data-m="focus" data-d="1" aria-label="Increase focus minutes">+</button>
+      <button type="button" class="five" data-m="focus" data-d="5" aria-label="Increase focus by 5 minutes">+5</button>
+    </div>
+    <div class="step">
+      <span class="s-name">Break</span>
+      <button type="button" class="five" data-m="break" data-d="-5" aria-label="Decrease break by 5 minutes">&minus;5</button>
+      <button type="button" data-m="break" data-d="-1" aria-label="Decrease break minutes">&minus;</button>
+      <output id="v-break">5 min</output>
+      <button type="button" data-m="break" data-d="1" aria-label="Increase break minutes">+</button>
+      <button type="button" class="five" data-m="break" data-d="5" aria-label="Increase break by 5 minutes">+5</button>
+    </div>
+  </section>
+  <p class="tally">Completed focus sessions <b id="done">0</b></p>
+  <p class="hint">Space start/pause · R reset · F fullscreen · Z focus mode · T theme</p>
+  <p class="zenhint">Click the orb to start or pause · Z to exit · F for fullscreen</p>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const DURATION = { focus: 25 * 60 * 1000, break: 5 * 60 * 1000 };
+  const LIMITS = { focus: [1, 120], break: [1, 60] };
+  try {
+    const saved = JSON.parse(localStorage.getItem('pomodoro-minutes') || 'null');
+    if (saved) for (const m of ['focus', 'break']) {
+      const v = Math.round(Number(saved[m]));
+      if (v >= LIMITS[m][0] && v <= LIMITS[m][1]) DURATION[m] = v * 60000;
+    }
+  } catch (e) {}
+  const LABEL = { focus: 'Focus', break: 'Break' };
+  const C = 2 * Math.PI * 46;
+
+  const $ = id => document.getElementById(id);
+  const el = {
+    stage: $('stage'), time: $('time'), label: $('label'), status: $('status'),
+    main: $('main'), reset: $('reset'), bar: $('bar'),
+    mFocus: $('m-focus'), mBreak: $('m-break'), vFocus: $('v-focus'), vBreak: $('v-break'), test: $('test')
+  };
+  el.bar.style.strokeDasharray = C;
+  const doneEl = $('done');
+  let ringDone = false, ringT = null, doneCount = 0;
+  const stepBtns = document.querySelectorAll('.step button');
+
+  let mode = 'focus';
+  let remaining = DURATION.focus;
+  let endAt = 0;
+  let timer = null;
+  let running = false;
+
+  /* ---------- Alarm (Web Audio, no files needed) ---------- */
+  let ctx = null, alarm = null, alarmTimeout = null;
+
+  function unlockAudio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) ctx = new AC();
+    }
+    if (!ctx) return;
+    if (ctx.state !== 'running') ctx.resume();
+    if (!unlockAudio.primed) { // iOS needs a sound started inside a tap
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+      unlockAudio.primed = true;
+    }
+  }
+
+  let muted = false;
+  try { muted = localStorage.getItem('pomodoro-muted') === '1'; } catch (e) {}
+  const MASTER = 0.8;
+
+  // Metallic bell: three strikes ("tong, tong, tong") per round, scheduled on the audio clock
+  function buildAlarm(when, finishedMode, rounds) {
+    const master = ctx.createGain();
+    master.gain.value = muted ? 0 : MASTER;
+    master.connect(ctx.destination);
+    const base = finishedMode === 'focus' ? 523.25 : 440;
+    const strikes = [[0, base, 0.28], [0.58, base, 0.30], [1.16, base * 1.122, 0.34]];
+    const partials = [[1, 1, 1.65], [2, 0.55, 1.25], [2.41, 0.38, 0.95], [3.01, 0.28, 0.75], [4.18, 0.16, 0.45]];
+    const oscs = [];
+    for (let r = 0; r < rounds; r++) {
+      strikes.forEach(([dt, f, peak]) => {
+        const t = when + r * 3 + dt;
+        partials.forEach(([ratio, gain, decay]) => {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = f * ratio;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(peak * gain, t + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+          osc.connect(g).connect(master);
+          osc.start(t);
+          osc.stop(t + decay + 0.05);
+          oscs.push(osc);
+        });
+      });
+    }
+    return { master, oscs };
+  }
+
+  function scheduleAlarm(delayMs, finishedMode) {
+    stopAlarm();
+    if (ctx) alarm = buildAlarm(ctx.currentTime + delayMs / 1000 + 0.02, finishedMode, 3);
+  }
+
+  function stopAlarm() {
+    clearTimeout(alarmTimeout);
+    el.stage.classList.remove('alarm');
+    if (alarm && ctx) {
+      const a = alarm;
+      alarm = null;
+      try {
+        a.master.gain.cancelScheduledValues(ctx.currentTime);
+        a.master.gain.setTargetAtTime(0, ctx.currentTime, 0.03);
+        a.oscs.forEach(o => { try { o.stop(ctx.currentTime + 0.2); } catch (e) {} });
+      } catch (e) {}
+    }
+  }
+
+  /* ---------- Rendering ---------- */
+  const fmt = ms => {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  };
+
+  function render(statusText) {
+    const text = fmt(remaining);
+    el.time.textContent = text;
+    el.label.textContent = LABEL[mode];
+    document.title = text + ' · ' + LABEL[mode];
+    document.body.dataset.mode = mode;
+    el.mFocus.setAttribute('aria-pressed', mode === 'focus');
+    el.mBreak.setAttribute('aria-pressed', mode === 'break');
+    el.stage.classList.toggle('running', running);
+
+    // Rings drain and shrink as time runs out, then vanish when a session ends
+    const f = ringDone ? 0 : Math.max(0, Math.min(1, remaining / DURATION[mode]));
+    el.bar.style.strokeDashoffset = C * (1 - f);
+    el.stage.style.setProperty('--ring-scale', ringDone ? '0.55' : (0.68 + 0.32 * f).toFixed(4));
+    el.stage.style.setProperty('--ring-op', ringDone ? '0' : Math.max(0.18, Math.min(1, 0.25 + 0.75 * f)).toFixed(4));
+    doneEl.textContent = doneCount;
+
+    const started = remaining < DURATION[mode];
+    el.main.textContent = running ? 'Pause' : started ? 'Resume' : 'Start';
+    el.vFocus.textContent = DURATION.focus / 60000 + ' min';
+    el.vBreak.textContent = DURATION.break / 60000 + ' min';
+    stepBtns.forEach(b => { b.disabled = running; });
+    el.test.disabled = running;
+    if (statusText) el.status.textContent = statusText;
+  }
+
+  /* ---------- Timer logic ---------- */
+  function tick() {
+    remaining = endAt - Date.now();
+    if (remaining <= 0) return complete();
+    render();
+  }
+
+  function start() {
+    unlockAudio();
+    askNotify();
+    ringDone = false;
+    endAt = Date.now() + remaining;
+    scheduleAlarm(remaining, mode);
+    running = true;
+    clearInterval(timer);
+    timer = setInterval(tick, 200);
+    render(mode === 'focus' ? 'Stay with one thing' : 'Rest your eyes');
+  }
+
+  function pause() {
+    stopAlarm();
+    remaining = Math.max(0, endAt - Date.now());
+    running = false;
+    clearInterval(timer);
+    render('Paused');
+  }
+
+  function resetTimer() {
+    stopAlarm();
+    ringDone = false;
+    running = false;
+    clearInterval(timer);
+    remaining = DURATION[mode];
+    render('Ready');
+  }
+
+  function setMode(next) {
+    if (next === mode && !running && remaining === DURATION[mode]) return;
+    mode = next;
+    resetTimer();
+  }
+
+  function complete() {
+    const finished = mode;
+    running = false;
+    clearInterval(timer);
+    if (finished === 'focus') doneCount++;
+    ringDone = true;
+    clearTimeout(ringT);
+    ringT = setTimeout(() => { ringDone = false; render(); }, 2200);
+    mode = finished === 'focus' ? 'break' : 'focus';
+    remaining = DURATION[mode];
+    render(finished === 'focus' ? 'Focus done · tap to silence' : 'Break done · tap to silence');
+    notifyDone(finished);
+    // Normally the chime was already scheduled at Start; rebuild it only if that did not work
+    if (!(alarm && ctx && ctx.state === 'running')) {
+      unlockAudio();
+      stopAlarm();
+      if (ctx) alarm = buildAlarm(ctx.currentTime + 0.05, finished, 3);
+    }
+    el.stage.classList.add('alarm');
+    clearTimeout(alarmTimeout);
+    alarmTimeout = setTimeout(stopAlarm, 9500);
+    if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 400]);
+  }
+
+  /* ---------- Session length ---------- */
+  function adjust(m, d) {
+    if (running) return;
+    const [lo, hi] = LIMITS[m];
+    const v = Math.min(hi, Math.max(lo, DURATION[m] / 60000 + d));
+    if (v * 60000 === DURATION[m]) return;
+    DURATION[m] = v * 60000;
+    try {
+      localStorage.setItem('pomodoro-minutes', JSON.stringify({ focus: DURATION.focus / 60000, break: DURATION.break / 60000 }));
+    } catch (e) {}
+    if (m === mode) { stopAlarm(); remaining = DURATION[m]; render('Ready'); } else render();
+  }
+
+  // Hold a button to keep stepping
+  let holdT = null, holdI = null;
+  const stopHold = () => { clearTimeout(holdT); clearInterval(holdI); };
+  stepBtns.forEach(b => {
+    const go = () => adjust(b.dataset.m, Number(b.dataset.d));
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      go();
+      holdT = setTimeout(() => { holdI = setInterval(go, 90); }, 420);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, stopHold));
+    b.addEventListener('click', e => { if (e.detail === 0) go(); }); // keyboard
+  });
+  window.addEventListener('blur', stopHold);
+
+  /* ---------- Events ---------- */
+  el.main.addEventListener('click', () => (running ? pause() : start()));
+  el.reset.addEventListener('click', resetTimer);
+  el.mFocus.addEventListener('click', () => { unlockAudio(); setMode('focus'); });
+  el.mBreak.addEventListener('click', () => { unlockAudio(); setMode('break'); });
+
+  document.addEventListener('keydown', e => {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Space' && e.target.tagName !== 'BUTTON') {
+      e.preventDefault();
+      running ? pause() : start();
+    } else if (e.key.toLowerCase() === 'r') {
+      resetTimer();
+    } else if (e.key.toLowerCase() === 'f') {
+      toggleFullscreen();
+    } else if (e.key.toLowerCase() === 'z') {
+      toggleZen();
+    } else if (e.key.toLowerCase() === 't') {
+      toggleTheme();
+    } else if (e.key === 'Escape' && document.body.classList.contains('zen') && !document.fullscreenElement) {
+      setZen(false);
+    }
+  });
+
+  el.test.addEventListener('click', () => {
+    if (running) return;
+    if (muted) { muted = false; paintMute(); }
+    unlockAudio();
+    stopAlarm();
+    if (ctx) alarm = buildAlarm(ctx.currentTime + 0.05, mode, 1);
+    toast('Playing bell: Tong Tong Tong');
+  });
+  el.stage.addEventListener('click', () => {
+    if (alarm || el.stage.classList.contains('alarm')) { stopAlarm(); el.status.textContent = 'Ready'; }
+    else if (document.body.classList.contains('zen')) { running ? pause() : start(); }
+  });
+  el.stage.addEventListener('dblclick', () => toggleFullscreen());
+  document.addEventListener('pointerdown', unlockAudio, { passive: true });
+
+  // Catch up immediately when returning to a backgrounded tab
+  document.addEventListener('visibilitychange', () => { if (running) tick(); });
+
+  /* ---------- Toast, logo export, mute ---------- */
+  const toastEl = $('toast');
+  let toastT = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  function logoSVG() {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f8fafc"/><stop offset="35%" stop-color="#ff4fa8"/><stop offset="70%" stop-color="#8a5cff"/><stop offset="100%" stop-color="#2f7bff"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8369a"/><stop offset="0.5" stop-color="#4a2cb4"/><stop offset="1" stop-color="#1d4fe0"/></linearGradient>
+    <radialGradient id="teal" cx="84%" cy="62%" r="60%"><stop offset="0" stop-color="#19c8aa" stop-opacity="0.8"/><stop offset="1" stop-color="#19c8aa" stop-opacity="0"/></radialGradient>
+    <radialGradient id="vig" cx="50%" cy="50%" r="50%"><stop offset="0.55" stop-color="#040512" stop-opacity="0"/><stop offset="1" stop-color="#040512" stop-opacity="0.8"/></radialGradient>
+    <linearGradient id="p1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#ff4cb0" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="p2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#28e6be" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="p3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#50a0ff" stop-opacity="0.05"/></linearGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff" stop-opacity="0.85"/><stop offset="1" stop-color="#bef0ff" stop-opacity="0"/></radialGradient>
+    <clipPath id="clip"><circle cx="256" cy="256" r="204"/></clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="246" fill="#040409"/>
+  <circle cx="256" cy="256" r="236" fill="none" stroke="url(#rg)" stroke-width="14"/>
+  <g clip-path="url(#clip)">
+    <rect x="52" y="52" width="408" height="408" fill="url(#bg)"/>
+    <rect x="52" y="52" width="408" height="408" fill="url(#teal)"/>
+    <rect x="52" y="52" width="408" height="408" fill="url(#vig)"/>
+    <g style="mix-blend-mode:screen">
+      <path d="M256 256 C 290 270, 330 400, 346 440 C 300 410, 250 330, 256 256 Z" fill="url(#p1)" transform="rotate(8 256 256)"/>
+      <path d="M256 256 C 330 230, 400 240, 450 262 C 400 300, 320 296, 256 256 Z" fill="url(#p2)"/>
+      <path d="M256 256 C 230 190, 250 120, 290 80 C 310 140, 290 210, 256 256 Z" fill="url(#p3)"/>
+      <path d="M256 256 C 190 240, 130 250, 70 300 C 130 320, 210 300, 256 256 Z" fill="url(#p3)" opacity="0.8"/>
+    </g>
+    <circle cx="256" cy="256" r="60" fill="url(#core)"/>
+  </g>
+</svg>`;
+  }
+  const logoURI = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(logoSVG());
+  $('logoImg').src = logoURI;
+  $('favicon').href = logoURI;
+
+  function saveFile(url, name) {
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $('dl-svg').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
+    saveFile(url, 'aura-siri-orb-logo.svg');
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast('Downloaded aura-siri-orb-logo.svg');
+  });
+  $('dl-png').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 512;
+      c.getContext('2d').drawImage(img, 0, 0, 512, 512);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => {
+        if (!b) return;
+        const u = URL.createObjectURL(b);
+        saveFile(u, 'aura-siri-orb-logo-512x512.png');
+        setTimeout(() => URL.revokeObjectURL(u), 1500);
+        toast('Downloaded 512×512 PNG logo');
+      }, 'image/png');
+    };
+    img.src = url;
+  });
+
+  function paintMute() {
+    $('ic-on').classList.toggle('hide', muted);
+    $('ic-off').classList.toggle('hide', !muted);
+    $('mute').setAttribute('aria-pressed', muted);
+  }
+  $('mute').addEventListener('click', () => {
+    muted = !muted;
+    try { localStorage.setItem('pomodoro-muted', muted ? '1' : '0'); } catch (e) {}
+    if (alarm) alarm.master.gain.value = muted ? 0 : MASTER;
+    paintMute();
+    toast(muted ? 'Alarm sound muted' : 'Alarm sound on');
+  });
+  paintMute();
+
+  /* ---------- Focus mode, fullscreen, desktop notifications ---------- */
+  function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } catch (e) {}
+  }
+  function setZen(on) {
+    document.body.classList.toggle('zen', on);
+    $('zen').setAttribute<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07060d">
+<title>Pomodoro · 25:00</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link id="favicon" rel="icon" type="image/svg+xml" href="">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@200;300;400;600&display=swap" rel="stylesheet">
+<style>
+  /* Registered so the orb colours can transition smoothly between modes */
+  @property --c1 { syntax: '<color>'; inherits: true; initial-value: #ff8a3d; }
+  @property --c2 { syntax: '<color>'; inherits: true; initial-value: #ff3d81; }
+  @property --c3 { syntax: '<color>'; inherits: true; initial-value: #8a3dff; }
+  @property --c4 { syntax: '<color>'; inherits: true; initial-value: #ffc15e; }
+
+  :root {
+    --bg: #07060d;
+    --text: #f6f3ff;
+    --muted: rgba(246, 243, 255, 0.58);
+    --size: min(84vw, 46vh, 440px);
+    --font: 'Sora', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  body {
+    --c1: #ff4fa8; --c2: #8a5cff; --c3: #2f7bff; --c4: #2fe3c4;
+    transition: --c1 1.4s ease, --c2 1.4s ease, --c3 1.4s ease, --c4 1.4s ease;
+  }
+  body[data-theme="glow"] { --c1: #ff8a3d; --c2: #ff3d81; --c3: #8a3dff; --c4: #ffc15e; }
+  body[data-mode="break"] {
+    --c1: #25d9ff; --c2: #2f7bff; --c3: #12e0b0; --c4: #7fe9ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+
+  body {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: safe center;
+    gap: clamp(1.25rem, 4vh, 2.5rem);
+    padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem max(1.5rem, env(safe-area-inset-bottom));
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 48%, color-mix(in srgb, var(--c3) 16%, transparent), transparent 70%),
+      var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ---------- Mode switch ---------- */
+  .modes {
+    display: flex;
+    padding: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+  }
+  .modes button {
+    font: 400 0.9rem var(--font);
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    padding: 0.6rem 1.5rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: color 0.3s, background 0.4s, box-shadow 0.4s;
+  }
+  .modes button:hover { color: var(--text); }
+  .modes button[aria-pressed="true"] {
+    color: #fff;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--c1) 55%, transparent), color-mix(in srgb, var(--c2) 55%, transparent));
+    box-shadow: 0 0 22px color-mix(in srgb, var(--c2) 40%, transparent);
+  }
+
+  /* ---------- Orb ---------- */
+  .stage {
+    position: relative;
+    width: var(--size);
+    height: var(--size);
+    display: grid;
+    place-items: center;
+  }
+
+  .halo {
+    position: absolute;
+    inset: -22%;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 40%, var(--c1), transparent 55%),
+      radial-gradient(circle at 65% 60%, var(--c2), transparent 55%),
+      radial-gradient(circle at 50% 50%, var(--c3), transparent 65%);
+    filter: blur(60px);
+    opacity: 0.38;
+    transition: opacity 0.8s;
+    animation: breathe 7s ease-in-out infinite;
+  }
+
+  .orb {
+    position: absolute;
+    inset: 11%;
+    border-radius: 50%;
+    overflow: hidden;
+    isolation: isolate;
+    background: #0a0614;
+    box-shadow:
+      0 0 40px color-mix(in srgb, var(--c2) 45%, transparent),
+      0 0 120px color-mix(in srgb, var(--c3) 35%, transparent),
+      inset 0 0 50px color-mix(in srgb, var(--c1) 35%, transparent);
+    transition: box-shadow 0.8s;
+  }
+
+  #orbCanvas { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; filter: blur(2px); }
+
+  /* Metallic prismatic outer ring + dark groove (both shrink as time runs out) */
+  .metal {
+    position: absolute; inset: 0; border-radius: 50%; padding: 5px;
+    background: conic-gradient(from 0deg, #f8fafc, var(--c1), var(--c2), var(--c3), #f8fafc);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    animation: spin 16s linear infinite;
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+  .running .metal { animation-duration: 7s; }
+  .groove {
+    position: absolute; inset: 8px; border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: radial-gradient(circle, transparent 60%, rgba(2, 3, 10, 0.84) 100%);
+    box-shadow: inset 0 0 24px rgba(0, 0, 0, 0.9);
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+
+  /* Header, pills, toast */
+  .top { width: 100%; max-width: 54rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+  .brand { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
+  .brand img { width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.2); }
+  .brand small { font-weight: 300; letter-spacing: 0.06em; text-transform: none; color: var(--muted); }
+  .tools { display: flex; gap: 0.4rem; }
+  .pill {
+    font: 400 0.78rem var(--font); color: var(--muted);
+    background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 999px; padding: 0.5rem 0.85rem; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0.4rem; backdrop-filter: blur(10px);
+    transition: color 0.2s, background 0.2s, opacity 0.3s;
+  }
+  .pill:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.11); }
+  .pill:disabled { opacity: 0.3; cursor: not-allowed; }
+  .pill svg { width: 1rem; height: 1rem; }
+  .hide { display: none; }
+  .zenhint { display: none; position: fixed; left: 0; right: 0; bottom: max(1rem, env(safe-area-inset-bottom)); text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.7; pointer-events: none; }
+  /* Focus mode: only the orb and the time, scaled to the window */
+  body.zen { --size: min(92vw, 88vh); justify-content: center; gap: 0; }
+  body.zen .top, body.zen .modes, body.zen .controls, body.zen .settings, body.zen .tally, body.zen .hint { display: none; }
+  body.zen .stage { cursor: pointer; }
+  body.zen .zenhint { display: block; }
+  body.zen #time { font-size: calc(var(--size) * 0.19); }
+  body.zen #label { font-size: calc(var(--size) * 0.05); }
+  body.zen #status { font-size: calc(var(--size) * 0.035); }
+  .tally { font-size: 0.8rem; color: var(--muted); }
+  .tally b { color: var(--text); font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.07); }
+  .step button.five { font-size: 0.72rem; font-weight: 600; }
+  .toast {
+    position: fixed; left: 50%; bottom: max(1.25rem, env(safe-area-inset-bottom));
+    transform: translate(-50%, 0.5rem); opacity: 0; pointer-events: none;
+    padding: 0.55rem 1.1rem; border-radius: 999px; font-size: 0.82rem;
+    background: rgba(255, 255, 255, 0.09); border: 1px solid rgba(255, 255, 255, 0.14); backdrop-filter: blur(14px);
+    transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  @media (max-width: 520px) { .pill .t, .brand small { display: none; } .pill { padding: 0.55rem 0.7rem; } }
+
+  /* Theme: Glow (soft blobs). Hidden, and not animating, while the Siri theme is on */
+  .blob {
+    position: absolute;
+    left: 15%; top: 15%;
+    width: 70%; height: 70%;
+    border-radius: 50%;
+    filter: blur(26px);
+    mix-blend-mode: screen;
+    opacity: 0.95;
+  }
+  .b1 { background: radial-gradient(circle, var(--c1), transparent 68%); animation: orbitA 6s linear infinite, morph 3.5s ease-in-out infinite alternate; }
+  .b2 { background: radial-gradient(circle, var(--c2), transparent 68%); animation: orbitB 8s linear infinite, morph 4s ease-in-out infinite alternate; }
+  .b3 { background: radial-gradient(circle, var(--c3), transparent 68%); animation: orbitA 10s linear infinite reverse, morph 4.5s ease-in-out infinite alternate-reverse; }
+  .b4 { background: radial-gradient(circle, var(--c4), transparent 68%); width: 50%; height: 50%; left: 25%; top: 25%; animation: orbitB 5.5s linear infinite reverse, morph 3s ease-in-out infinite alternate; }
+  .b5 { background: radial-gradient(circle, var(--c3), transparent 66%); width: 58%; height: 58%; left: 21%; top: 21%; animation: orbitB 7s linear -3s infinite, morph 3.8s ease-in-out -1s infinite alternate-reverse; }
+  .b6 { background: radial-gradient(circle, var(--c1), transparent 66%); width: 52%; height: 52%; left: 24%; top: 24%; animation: orbitA 8s linear -2s infinite reverse, morph 3.4s ease-in-out -2s infinite alternate; }
+
+  /* The whole fluid layer keeps turning, so the orb never sits still */
+  .swirl { position: absolute; inset: 0; animation: spin 11s linear infinite; }
+  .ribbon {
+    position: absolute;
+    inset: 8%;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--c1), var(--c2), var(--c3), var(--c4), var(--c1));
+    filter: blur(34px);
+    mix-blend-mode: screen;
+    opacity: 0.5;
+    animation: spin 6s linear infinite reverse;
+  }
+  .ribbon.r2 {
+    inset: 14%;
+    background: conic-gradient(from 180deg, var(--c3), var(--c4), var(--c2), var(--c1), var(--c3));
+    opacity: 0.4;
+    animation: spin 8s linear infinite;
+  }
+
+  .glow-layer { display: none; position: absolute; inset: 0; }
+  body[data-theme="glow"] .glow-layer { display: block; }
+  body[data-theme="glow"] #orbCanvas { display: none; }
+
+  /* Dark centre keeps the time legible over the glow */
+  .orb::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(7, 5, 14, 0.62) 0, rgba(7, 5, 14, 0.25) 42%, transparent 68%),
+      radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.22), transparent 30%);
+    pointer-events: none;
+  }
+
+  .orb { animation: wobble 5s ease-in-out infinite; }
+  .running .orb { animation: pulse 2.2s ease-in-out infinite; }
+  .running .halo { opacity: 0.7; animation: breathe 2.6s ease-in-out infinite; }
+
+  .ring {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+    overflow: visible;
+    pointer-events: none;
+    scale: var(--ring-scale, 1);
+    opacity: var(--ring-op, 1);
+    transition: opacity 0.65s ease, scale 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .ring circle { fill: none; stroke-width: 0.9; }
+  .ring .track { stroke: rgba(255, 255, 255, 0.07); }
+  .ring .bar {
+    stroke: var(--c4);
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 2px var(--c4));
+  }
+
+  .readout {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    text-shadow: 0 2px 24px rgba(0, 0, 0, 0.55);
+  }
+  #label { font-size: clamp(1rem, 3.4vw, 1.25rem); font-weight: 400; letter-spacing: 0.04em; }
+  #time {
+    font-size: clamp(3.2rem, 15vw, 6.4rem);
+    font-weight: 200;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+  #status { font-size: 0.85rem; color: var(--muted); min-height: 1.2em; }
+
+  /* ---------- Controls ---------- */
+  .controls { display: flex; gap: 0.85rem; align-items: center; }
+  .btn {
+    font: 600 1rem var(--font);
+    border: 0;
+    cursor: pointer;
+    border-radius: 999px;
+    padding: 0.95rem 2.6rem;
+    min-width: 9.5rem;
+    color: #fff;
+    background: linear-gradient(120deg, var(--c1), var(--c2));
+    box-shadow: 0 8px 34px color-mix(in srgb, var(--c2) 50%, transparent);
+    transition: transform 0.2s, box-shadow 0.4s, filter 0.2s;
+  }
+  .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn:active { transform: scale(0.97); }
+  .btn.ghost {
+    min-width: 0;
+    padding: 0.95rem 1.7rem;
+    font-weight: 400;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+  }
+  .btn.ghost:hover { background: rgba(255, 255, 255, 0.12); }
+  .hint { font-size: 0.75rem; color: var(--muted); }
+
+  .settings { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem; }
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.45rem 0.4rem 1.05rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .step .s-name { font-size: 0.85rem; color: var(--muted); }
+  .step output { min-width: 4.3rem; text-align: center; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+  .step button {
+    width: 2.2rem; height: 2.2rem;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text);
+    font: 400 1.25rem/1 var(--font);
+    cursor: pointer;
+    touch-action: manipulation;
+    transition: background 0.2s, opacity 0.3s;
+  }
+  .step button:hover:not(:disabled) { background: color-mix(in srgb, var(--c2) 45%, transparent); }
+  .step button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .test {
+    font: 400 0.85rem var(--font);
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.65rem 1.1rem;
+    cursor: pointer;
+    transition: color 0.2s, opacity 0.3s;
+  }
+  .test:hover:not(:disabled) { color: var(--text); }
+  .test:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  button:focus-visible { outline: 2px solid var(--c4); outline-offset: 3px; }
+
+  /* ---------- Animations ---------- */
+  @keyframes orbitA {
+    from { transform: rotate(0deg) translateX(38%) rotate(0deg) scale(1); }
+    50%  { transform: rotate(180deg) translateX(46%) rotate(-180deg) scale(1.25); }
+    to   { transform: rotate(360deg) translateX(38%) rotate(-360deg) scale(1); }
+  }
+  @keyframes orbitB {
+    from { transform: rotate(90deg) translateX(42%) rotate(-90deg) scale(1.2); }
+    50%  { transform: rotate(270deg) translateX(22%) rotate(-270deg) scale(0.8); }
+    to   { transform: rotate(450deg) translateX(42%) rotate(-450deg) scale(1.2); }
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes morph {
+    0%   { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+    33%  { border-radius: 62% 38% 55% 45% / 45% 58% 42% 55%; }
+    66%  { border-radius: 40% 60% 35% 65% / 60% 40% 60% 40%; }
+    100% { border-radius: 55% 45% 60% 40% / 40% 60% 40% 60%; }
+  }
+  @keyframes wobble { 0%, 100% { transform: scale(1) rotate(0deg); } 50% { transform: scale(1.035) rotate(5deg); } }
+  @keyframes pulse   { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+  @keyframes breathe { 0%, 100% { transform: scale(0.94); } 50% { transform: scale(1.06); } }
+  @keyframes flash   { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+  .alarm .orb { animation: flash 0.7s ease-in-out infinite; }
+
+  @media (max-width: 420px) {
+    .btn { padding: 0.9rem 1.8rem; min-width: 8rem; }
+    .hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body data-mode="focus" data-theme="siri">
+
+  <header class="top">
+    <div class="brand"><img id="logoImg" alt="Aura logo"><span>Aura <small>· Pomodoro</small></span></div>
+    <div class="tools">
+      <button class="pill" id="zen" type="button" aria-pressed="false" title="Focus mode (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><span class="t">Focus mode</span></button>
+      <button class="pill" id="theme" type="button" title="Switch theme (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor"/></svg><span class="t">Theme: <b id="theme-name">Siri</b></span></button>
+      <button class="pill" id="fs" type="button" title="Fullscreen (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="t">Full</span></button>
+      <button class="pill" id="dl-png" type="button" title="Download 512x512 PNG logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg><span class="t">Logo PNG</span></button>
+      <button class="pill" id="dl-svg" type="button" title="Download SVG logo">SVG</button>
+      <button class="pill" id="test" type="button" title="Preview the bell alarm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-4-5.7V5a2 2 0 10-4 0v.3C7.7 6.2 6 8.4 6 11v3.2c0 .5-.2 1.1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><span class="t">Bell</span></button>
+      <button class="pill" id="mute" type="button" aria-label="Mute alarm" title="Mute or unmute the alarm">
+        <svg id="ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 010 7M19 5a10 10 0 010 14"/></svg>
+        <svg id="ic-off" class="hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="modes" role="group" aria-label="Session type">
+    <button id="m-focus" type="button" aria-pressed="true">Focus</button>
+    <button id="m-break" type="button" aria-pressed="false">Break</button>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="halo"></div>
+    <div class="metal" aria-hidden="true"></div>
+    <div class="groove" aria-hidden="true"></div>
+    <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+      <circle class="track" cx="50" cy="50" r="46"></circle>
+      <circle class="bar" id="bar" cx="50" cy="50" r="46"></circle>
+    </svg>
+    <div class="orb">
+      <canvas id="orbCanvas"></canvas>
+      <div class="glow-layer">
+        <div class="ribbon"></div>
+        <div class="ribbon r2"></div>
+        <div class="swirl">
+          <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+          <div class="blob b4"></div><div class="blob b5"></div><div class="blob b6"></div>
+        </div>
+      </div>
+    </div>
+    <div class="readout">
+      <span id="label">Focus</span>
+      <span id="time" role="timer">25:00</span>
+      <span id="status" aria-live="polite">Ready</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn" id="main" type="button">Start</button>
+    <button class="btn ghost" id="reset" type="button">Reset</button>
+  </div>
+  <section class="settings" aria-label="Session length">
+    <div class="step">
+      <span class="s-name">Focus</span>
+      <button type="button" class="five" data-m="focus" data-d="-5" aria-label="Decrease focus by 5 minutes">&minus;5</button>
+      <button type="button" data-m="focus" data-d="-1" aria-label="Decrease focus minutes">&minus;</button>
+      <output id="v-focus">25 min</output>
+      <button type="button" data-m="focus" data-d="1" aria-label="Increase focus minutes">+</button>
+      <button type="button" class="five" data-m="focus" data-d="5" aria-label="Increase focus by 5 minutes">+5</button>
+    </div>
+    <div class="step">
+      <span class="s-name">Break</span>
+      <button type="button" class="five" data-m="break" data-d="-5" aria-label="Decrease break by 5 minutes">&minus;5</button>
+      <button type="button" data-m="break" data-d="-1" aria-label="Decrease break minutes">&minus;</button>
+      <output id="v-break">5 min</output>
+      <button type="button" data-m="break" data-d="1" aria-label="Increase break minutes">+</button>
+      <button type="button" class="five" data-m="break" data-d="5" aria-label="Increase break by 5 minutes">+5</button>
+    </div>
+  </section>
+  <p class="tally">Completed focus sessions <b id="done">0</b></p>
+  <p class="hint">Space start/pause · R reset · F fullscreen · Z focus mode · T theme</p>
+  <p class="zenhint">Click the orb to start or pause · Z to exit · F for fullscreen</p>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const DURATION = { focus: 25 * 60 * 1000, break: 5 * 60 * 1000 };
+  const LIMITS = { focus: [1, 120], break: [1, 60] };
+  try {
+    const saved = JSON.parse(localStorage.getItem('pomodoro-minutes') || 'null');
+    if (saved) for (const m of ['focus', 'break']) {
+      const v = Math.round(Number(saved[m]));
+      if (v >= LIMITS[m][0] && v <= LIMITS[m][1]) DURATION[m] = v * 60000;
+    }
+  } catch (e) {}
+  const LABEL = { focus: 'Focus', break: 'Break' };
+  const C = 2 * Math.PI * 46;
+
+  const $ = id => document.getElementById(id);
+  const el = {
+    stage: $('stage'), time: $('time'), label: $('label'), status: $('status'),
+    main: $('main'), reset: $('reset'), bar: $('bar'),
+    mFocus: $('m-focus'), mBreak: $('m-break'), vFocus: $('v-focus'), vBreak: $('v-break'), test: $('test')
+  };
+  el.bar.style.strokeDasharray = C;
+  const doneEl = $('done');
+  let ringDone = false, ringT = null, doneCount = 0;
+  const stepBtns = document.querySelectorAll('.step button');
+
+  let mode = 'focus';
+  let remaining = DURATION.focus;
+  let endAt = 0;
+  let timer = null;
+  let running = false;
+
+  /* ---------- Alarm (Web Audio, no files needed) ---------- */
+  let ctx = null, alarm = null, alarmTimeout = null;
+
+  function unlockAudio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) ctx = new AC();
+    }
+    if (!ctx) return;
+    if (ctx.state !== 'running') ctx.resume();
+    if (!unlockAudio.primed) { // iOS needs a sound started inside a tap
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+      unlockAudio.primed = true;
+    }
+  }
+
+  let muted = false;
+  try { muted = localStorage.getItem('pomodoro-muted') === '1'; } catch (e) {}
+  const MASTER = 0.8;
+
+  // Metallic bell: three strikes ("tong, tong, tong") per round, scheduled on the audio clock
+  function buildAlarm(when, finishedMode, rounds) {
+    const master = ctx.createGain();
+    master.gain.value = muted ? 0 : MASTER;
+    master.connect(ctx.destination);
+    const base = finishedMode === 'focus' ? 523.25 : 440;
+    const strikes = [[0, base, 0.28], [0.58, base, 0.30], [1.16, base * 1.122, 0.34]];
+    const partials = [[1, 1, 1.65], [2, 0.55, 1.25], [2.41, 0.38, 0.95], [3.01, 0.28, 0.75], [4.18, 0.16, 0.45]];
+    const oscs = [];
+    for (let r = 0; r < rounds; r++) {
+      strikes.forEach(([dt, f, peak]) => {
+        const t = when + r * 3 + dt;
+        partials.forEach(([ratio, gain, decay]) => {
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = f * ratio;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(peak * gain, t + 0.012);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+          osc.connect(g).connect(master);
+          osc.start(t);
+          osc.stop(t + decay + 0.05);
+          oscs.push(osc);
+        });
+      });
+    }
+    return { master, oscs };
+  }
+
+  function scheduleAlarm(delayMs, finishedMode) {
+    stopAlarm();
+    if (ctx) alarm = buildAlarm(ctx.currentTime + delayMs / 1000 + 0.02, finishedMode, 3);
+  }
+
+  function stopAlarm() {
+    clearTimeout(alarmTimeout);
+    el.stage.classList.remove('alarm');
+    if (alarm && ctx) {
+      const a = alarm;
+      alarm = null;
+      try {
+        a.master.gain.cancelScheduledValues(ctx.currentTime);
+        a.master.gain.setTargetAtTime(0, ctx.currentTime, 0.03);
+        a.oscs.forEach(o => { try { o.stop(ctx.currentTime + 0.2); } catch (e) {} });
+      } catch (e) {}
+    }
+  }
+
+  /* ---------- Rendering ---------- */
+  const fmt = ms => {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+  };
+
+  function render(statusText) {
+    const text = fmt(remaining);
+    el.time.textContent = text;
+    el.label.textContent = LABEL[mode];
+    document.title = text + ' · ' + LABEL[mode];
+    document.body.dataset.mode = mode;
+    el.mFocus.setAttribute('aria-pressed', mode === 'focus');
+    el.mBreak.setAttribute('aria-pressed', mode === 'break');
+    el.stage.classList.toggle('running', running);
+
+    // Rings drain and shrink as time runs out, then vanish when a session ends
+    const f = ringDone ? 0 : Math.max(0, Math.min(1, remaining / DURATION[mode]));
+    el.bar.style.strokeDashoffset = C * (1 - f);
+    el.stage.style.setProperty('--ring-scale', ringDone ? '0.55' : (0.68 + 0.32 * f).toFixed(4));
+    el.stage.style.setProperty('--ring-op', ringDone ? '0' : Math.max(0.18, Math.min(1, 0.25 + 0.75 * f)).toFixed(4));
+    doneEl.textContent = doneCount;
+
+    const started = remaining < DURATION[mode];
+    el.main.textContent = running ? 'Pause' : started ? 'Resume' : 'Start';
+    el.vFocus.textContent = DURATION.focus / 60000 + ' min';
+    el.vBreak.textContent = DURATION.break / 60000 + ' min';
+    stepBtns.forEach(b => { b.disabled = running; });
+    el.test.disabled = running;
+    if (statusText) el.status.textContent = statusText;
+  }
+
+  /* ---------- Timer logic ---------- */
+  function tick() {
+    remaining = endAt - Date.now();
+    if (remaining <= 0) return complete();
+    render();
+  }
+
+  function start() {
+    unlockAudio();
+    askNotify();
+    ringDone = false;
+    endAt = Date.now() + remaining;
+    scheduleAlarm(remaining, mode);
+    running = true;
+    clearInterval(timer);
+    timer = setInterval(tick, 200);
+    render(mode === 'focus' ? 'Stay with one thing' : 'Rest your eyes');
+  }
+
+  function pause() {
+    stopAlarm();
+    remaining = Math.max(0, endAt - Date.now());
+    running = false;
+    clearInterval(timer);
+    render('Paused');
+  }
+
+  function resetTimer() {
+    stopAlarm();
+    ringDone = false;
+    running = false;
+    clearInterval(timer);
+    remaining = DURATION[mode];
+    render('Ready');
+  }
+
+  function setMode(next) {
+    if (next === mode && !running && remaining === DURATION[mode]) return;
+    mode = next;
+    resetTimer();
+  }
+
+  function complete() {
+    const finished = mode;
+    running = false;
+    clearInterval(timer);
+    if (finished === 'focus') doneCount++;
+    ringDone = true;
+    clearTimeout(ringT);
+    ringT = setTimeout(() => { ringDone = false; render(); }, 2200);
+    mode = finished === 'focus' ? 'break' : 'focus';
+    remaining = DURATION[mode];
+    render(finished === 'focus' ? 'Focus done · tap to silence' : 'Break done · tap to silence');
+    notifyDone(finished);
+    // Normally the chime was already scheduled at Start; rebuild it only if that did not work
+    if (!(alarm && ctx && ctx.state === 'running')) {
+      unlockAudio();
+      stopAlarm();
+      if (ctx) alarm = buildAlarm(ctx.currentTime + 0.05, finished, 3);
+    }
+    el.stage.classList.add('alarm');
+    clearTimeout(alarmTimeout);
+    alarmTimeout = setTimeout(stopAlarm, 9500);
+    if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 400]);
+  }
+
+  /* ---------- Session length ---------- */
+  function adjust(m, d) {
+    if (running) return;
+    const [lo, hi] = LIMITS[m];
+    const v = Math.min(hi, Math.max(lo, DURATION[m] / 60000 + d));
+    if (v * 60000 === DURATION[m]) return;
+    DURATION[m] = v * 60000;
+    try {
+      localStorage.setItem('pomodoro-minutes', JSON.stringify({ focus: DURATION.focus / 60000, break: DURATION.break / 60000 }));
+    } catch (e) {}
+    if (m === mode) { stopAlarm(); remaining = DURATION[m]; render('Ready'); } else render();
+  }
+
+  // Hold a button to keep stepping
+  let holdT = null, holdI = null;
+  const stopHold = () => { clearTimeout(holdT); clearInterval(holdI); };
+  stepBtns.forEach(b => {
+    const go = () => adjust(b.dataset.m, Number(b.dataset.d));
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      go();
+      holdT = setTimeout(() => { holdI = setInterval(go, 90); }, 420);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(t => b.addEventListener(t, stopHold));
+    b.addEventListener('click', e => { if (e.detail === 0) go(); }); // keyboard
+  });
+  window.addEventListener('blur', stopHold);
+
+  /* ---------- Events ---------- */
+  el.main.addEventListener('click', () => (running ? pause() : start()));
+  el.reset.addEventListener('click', resetTimer);
+  el.mFocus.addEventListener('click', () => { unlockAudio(); setMode('focus'); });
+  el.mBreak.addEventListener('click', () => { unlockAudio(); setMode('break'); });
+
+  document.addEventListener('keydown', e => {
+    if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Space' && e.target.tagName !== 'BUTTON') {
+      e.preventDefault();
+      running ? pause() : start();
+    } else if (e.key.toLowerCase() === 'r') {
+      resetTimer();
+    } else if (e.key.toLowerCase() === 'f') {
+      toggleFullscreen();
+    } else if (e.key.toLowerCase() === 'z') {
+      toggleZen();
+    } else if (e.key.toLowerCase() === 't') {
+      toggleTheme();
+    } else if (e.key === 'Escape' && document.body.classList.contains('zen') && !document.fullscreenElement) {
+      setZen(false);
+    }
+  });
+
+  el.test.addEventListener('click', () => {
+    if (running) return;
+    if (muted) { muted = false; paintMute(); }
+    unlockAudio();
+    stopAlarm();
+    if (ctx) alarm = buildAlarm(ctx.currentTime + 0.05, mode, 1);
+    toast('Playing bell: Tong Tong Tong');
+  });
+  el.stage.addEventListener('click', () => {
+    if (alarm || el.stage.classList.contains('alarm')) { stopAlarm(); el.status.textContent = 'Ready'; }
+    else if (document.body.classList.contains('zen')) { running ? pause() : start(); }
+  });
+  el.stage.addEventListener('dblclick', () => toggleFullscreen());
+  document.addEventListener('pointerdown', unlockAudio, { passive: true });
+
+  // Catch up immediately when returning to a backgrounded tab
+  document.addEventListener('visibilitychange', () => { if (running) tick(); });
+
+  /* ---------- Toast, logo export, mute ---------- */
+  const toastEl = $('toast');
+  let toastT = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  function logoSVG() {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f8fafc"/><stop offset="35%" stop-color="#ff4fa8"/><stop offset="70%" stop-color="#8a5cff"/><stop offset="100%" stop-color="#2f7bff"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8369a"/><stop offset="0.5" stop-color="#4a2cb4"/><stop offset="1" stop-color="#1d4fe0"/></linearGradient>
+    <radialGradient id="teal" cx="84%" cy="62%" r="60%"><stop offset="0" stop-color="#19c8aa" stop-opacity="0.8"/><stop offset="1" stop-color="#19c8aa" stop-opacity="0"/></radialGradient>
+    <radialGradient id="vig" cx="50%" cy="50%" r="50%"><stop offset="0.55" stop-color="#040512" stop-opacity="0"/><stop offset="1" stop-color="#040512" stop-opacity="0.8"/></radialGradient>
+    <linearGradient id="p1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#ff4cb0" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="p2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#28e6be" stop-opacity="0.05"/></linearGradient>
+    <linearGradient id="p3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0.8"/><stop offset="1" stop-color="#50a0ff" stop-opacity="0.05"/></linearGradient>
+    <radialGradient id="core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff" stop-opacity="0.85"/><stop offset="1" stop-color="#bef0ff" stop-opacity="0"/></radialGradient>
+    <clipPath id="clip"><circle cx="256" cy="256" r="204"/></clipPath>
+  </defs>
+  <circle cx="256" cy="256" r="246" fill="#040409"/>
+  <circle cx="256" cy="256" r="236" fill="none" stroke="url(#rg)" stroke-width="14"/>
+  <g clip-path="url(#clip)">
+    <rect x="52" y="52" width="408" height="408" fill="url(#bg)"/>
+    <rect x="52" y="52" width="408" height="408" fill="url(#teal)"/>
+    <rect x="52" y="52" width="408" height="408" fill="url(#vig)"/>
+    <g style="mix-blend-mode:screen">
+      <path d="M256 256 C 290 270, 330 400, 346 440 C 300 410, 250 330, 256 256 Z" fill="url(#p1)" transform="rotate(8 256 256)"/>
+      <path d="M256 256 C 330 230, 400 240, 450 262 C 400 300, 320 296, 256 256 Z" fill="url(#p2)"/>
+      <path d="M256 256 C 230 190, 250 120, 290 80 C 310 140, 290 210, 256 256 Z" fill="url(#p3)"/>
+      <path d="M256 256 C 190 240, 130 250, 70 300 C 130 320, 210 300, 256 256 Z" fill="url(#p3)" opacity="0.8"/>
+    </g>
+    <circle cx="256" cy="256" r="60" fill="url(#core)"/>
+  </g>
+</svg>`;
+  }
+  const logoURI = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(logoSVG());
+  $('logoImg').src = logoURI;
+  $('favicon').href = logoURI;
+
+  function saveFile(url, name) {
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $('dl-svg').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
+    saveFile(url, 'aura-siri-orb-logo.svg');
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast('Downloaded aura-siri-orb-logo.svg');
+  });
+  $('dl-png').addEventListener('click', () => {
+    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 512;
+      c.getContext('2d').drawImage(img, 0, 0, 512, 512);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => {
+        if (!b) return;
+        const u = URL.createObjectURL(b);
+        saveFile(u, 'aura-siri-orb-logo-512x512.png');
+        setTimeout(() => URL.revokeObjectURL(u), 1500);
+        toast('Downloaded 512×512 PNG logo');
+      }, 'image/png');
+    };
+    img.src = url;
+  });
+
+  function paintMute() {
+    $('ic-on').classList.toggle('hide', muted);
+    $('ic-off').classList.toggle('hide', !muted);
+    $('mute').setAttribute('aria-pressed', muted);
+  }
+  $('mute').addEventListener('click', () => {
+    muted = !muted;
+    try { localStorage.setItem('pomodoro-muted', muted ? '1' : '0'); } catch (e) {}
+    if (alarm) alarm.master.gain.value = muted ? 0 : MASTER;
+    paintMute();
+    toast(muted ? 'Alarm sound muted' : 'Alarm sound on');
+  });
+  paintMute();
+
+  /* ---------- Focus mode, fullscreen, desktop notifications ---------- */
+  function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } catch (e) {}
+  }
+  function setZen(on) {
+    document.body.classList.toggle('zen', on);
+    $('zen').setAttribute('aria-pressed', on);
+  }
+  function toggleZen() { setZen(!document.body.classList.contains('zen')); }
+  $('zen').addEventListener('click', toggleZen);
+  $('fs').addEventListener('click', toggleFullscreen);
+
+  function askNotify() {
+    try {
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    } catch (e) {}
+  }
+  function notifyDone(finished) {
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'granted' || document.hasFocus()) return;
+      const n = new Notification(finished === 'focus' ? 'Focus session done' : 'Break is over', {
+        body: finished === 'focus' ? 'Nice work. Take a ' + DURATION.break / 60000 + ' min break.' : 'Ready for the next focus session?',
+        icon: logoURI,
+        tag: 'aura-pomodoro'
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch (e) {}
+  }
+
+  /* ---------- Theme switch (Siri / Glow) ---------- */
+  const THEMES = { siri: 'Siri', glow: 'Glow' };
+  let theme = 'siri';
+  try { const t = localStorage.getItem('pomodoro-theme'); if (THEMES[t]) theme = t; } catch (e) {}
+  function applyTheme() {
+    document.body.dataset.theme = theme;
+    $('theme-name').textContent = THEMES[theme];
+    try { localStorage.setItem('pomodoro-theme', theme); } catch (e) {}
+  }
+  function toggleTheme() {
+    theme = theme === 'siri' ? 'glow' : 'siri';
+    applyTheme();
+    toast('Theme: ' + THEMES[theme]);
+  }
+  $('theme').addEventListener('click', toggleTheme);
+  applyTheme();
+
+  /* ---------- Siri-style orb (canvas) ---------- */
+  const SIRI = {
+    focus: {
+      bg: ['#d8369a', '#4a2cb4', '#1d4fe0'], left: 'rgba(40, 110, 255, 0.55)', right: 'rgba(25, 200, 170, 0.55)',
+      petals: ['255,76,176', '40,230,190', '240,248,255', '80,150,255', '160,110,255', '110,225,255', '236,60,170', '230,240,255']
+    },
+    break: {
+      bg: ['#12b5c8', '#1f5fd6', '#2a35b8'], left: 'rgba(60, 120, 255, 0.55)', right: 'rgba(30, 220, 190, 0.55)',
+      petals: ['60,235,215', '60,170,255', '240,250,255', '90,130,255', '130,120,255', '120,235,255', '40,200,230', '230,245,255']
+    }
+  };
+  // a = angle (rad), L = length & w = width (fraction of radius), spin = rad/frame
+  const PETALS = [
+    { a: 1.45, L: 0.95, w: 0.12, spin: 0.0011, ph: 0.0 },
+    { a: 0.10, L: 0.85, w: 0.13, spin: -0.0014, ph: 1.1 },
+    { a: -1.15, L: 0.80, w: 0.09, spin: 0.0018, ph: 2.0 },
+    { a: 2.45, L: 0.85, w: 0.14, spin: -0.0012, ph: 3.2 },
+    { a: -2.50, L: 0.80, w: 0.20, spin: 0.0009, ph: 4.1 },
+    { a: -0.45, L: 0.70, w: 0.10, spin: 0.0021, ph: 5.0 },
+    { a: -1.70, L: 0.75, w: 0.15, spin: -0.0016, ph: 0.7 },
+    { a: 3.10, L: 0.65, w: 0.08, spin: 0.0015, ph: 2.6 }
+  ];
+
+  const canvas = $('orbCanvas');
+  const gfx = canvas.getContext('2d');
+  const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let clock = 120, energy = 0.6;
+
+  function fitCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.max(1, canvas.clientWidth * dpr);
+    canvas.height = Math.max(1, canvas.clientHeight * dpr);
+    gfx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe(canvas);
+  window.addEventListener('resize', fitCanvas);
+
+  function glow(x, y, r, color, w, h) {
+    const g = gfx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, color);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    gfx.fillStyle = g;
+    gfx.fillRect(0, 0, w, h);
+  }
+
+  let lastDraw = 0;
+  function drawOrb(now) {
+    if (theme !== 'siri') { setTimeout(() => requestAnimationFrame(drawOrb), 250); return; } // Glow theme has no canvas work
+    const ts = now || performance.now();
+    // Idle: draw at ~30 FPS to save CPU/GPU. Running: full speed.
+    if (!running && lastDraw && ts - lastDraw < 33) { requestAnimationFrame(drawOrb); return; }
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) { requestAnimationFrame(drawOrb); return; }
+    const dt = lastDraw ? Math.min(4, (ts - lastDraw) / 16.67) : 1; // keeps the speed the same on any refresh rate
+    lastDraw = ts;
+    energy += ((running ? 1 : 0.6) - energy) * Math.min(1, 0.05 * dt);
+    if (!still) clock += (running ? 2.2 : 1) * dt;
+    const t = clock, P = SIRI[mode];
+    const cx = w / 2, cy = h / 2, R = w / 2;
+
+    gfx.globalCompositeOperation = 'source-over';
+    gfx.clearRect(0, 0, w, h);
+    const base = gfx.createLinearGradient(0, 0, 0, h);
+    base.addColorStop(0, P.bg[0]); base.addColorStop(0.5, P.bg[1]); base.addColorStop(1, P.bg[2]);
+    gfx.fillStyle = base;
+    gfx.fillRect(0, 0, w, h);
+    glow(w * (0.84 + 0.03 * Math.sin(t * 0.012)), h * (0.62 + 0.03 * Math.cos(t * 0.01)), R * 0.75, P.right, w, h);
+    glow(w * (0.16 + 0.03 * Math.cos(t * 0.011)), h * (0.62 + 0.03 * Math.sin(t * 0.013)), R * 0.85, P.left, w, h);
+    const vig = gfx.createRadialGradient(cx, cy, R * 0.45, cx, cy, R);
+    vig.addColorStop(0, 'rgba(4,5,18,0)'); vig.addColorStop(1, 'rgba(4,5,18,0.78)');
+    gfx.fillStyle = vig;
+    gfx.fillRect(0, 0, w, h);
+
+    gfx.globalCompositeOperation = 'lighter';
+    PETALS.forEach((p, i) => {
+      const col = P.petals[i];
+      const angle = p.a + t * p.spin * 2.2 + Math.sin(t * 0.011 + p.ph) * 0.38;
+      const len = R * p.L * (0.82 + 0.18 * Math.sin(t * 0.017 + p.ph * 1.7)) * (0.92 + 0.12 * energy);
+      const wid = R * p.w * (0.85 + 0.3 * Math.sin(t * 0.014 + p.ph * 2.3));
+      gfx.save();
+      gfx.translate(cx, cy);
+      gfx.rotate(angle);
+      gfx.beginPath();
+      gfx.ellipse(len / 2, 0, len / 2, wid * 1.3, 0, 0, Math.PI * 2); // fully round at both ends
+      const g = gfx.createLinearGradient(0, 0, len, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0.75)');
+      g.addColorStop(0.3, `rgba(${col},0.6)`);
+      g.addColorStop(1, `rgba(${col},0.04)`);
+      gfx.fillStyle = g;
+      gfx.fill();
+      gfx.strokeStyle = `rgba(${col},0.28)`;
+      gfx.lineWidth = 1;
+      gfx.stroke();
+      gfx.restore();
+    });
+
+    const coreR = R * (0.2 + 0.03 * Math.sin(t * 0.03)) * (0.9 + 0.2 * energy);
+    const core = gfx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+    core.addColorStop(0, 'rgba(255,255,255,0.7)');
+    core.addColorStop(0.5, 'rgba(190,240,255,0.22)');
+    core.addColorStop(1, 'rgba(190,240,255,0)');
+    gfx.fillStyle = core;
+    gfx.beginPath();
+    gfx.arc(cx, cy, coreR, 0, Math.PI * 2);
+    gfx.fill();
+
+    gfx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(drawOrb);
+  }
+  fitCanvas();
+  requestAnimationFrame(drawOrb);
+
+  render('Ready');
+})();
+</script>
+</body>
+</html>
+('aria-pressed', on);
+  }
+  function toggleZen() { setZen(!document.body.classList.contains('zen')); }
+  $('zen').addEventListener('click', toggleZen);
+  $('fs').addEventListener('click', toggleFullscreen);
+
+  function askNotify() {
+    try {
+      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    } catch (e) {}
+  }
+  function notifyDone(finished) {
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'granted' || document.hasFocus()) return;
+      const n = new Notification(finished === 'focus' ? 'Focus session done' : 'Break is over', {
+        body: finished === 'focus' ? 'Nice work. Take a ' + DURATION.break / 60000 + ' min break.' : 'Ready for the next focus session?',
+        icon: logoURI,
+        tag: 'aura-pomodoro'
+      });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch (e) {}
+  }
+
+  /* ---------- Theme switch (Siri / Glow) ---------- */
+  const THEMES = { siri: 'Siri', glow: 'Glow' };
+  let theme = 'siri';
+  try { const t = localStorage.getItem('pomodoro-theme'); if (THEMES[t]) theme = t; } catch (e) {}
+  function applyTheme() {
+    document.body.dataset.theme = theme;
+    $('theme-name').textContent = THEMES[theme];
+    try { localStorage.setItem('pomodoro-theme', theme); } catch (e) {}
+  }
+  function toggleTheme() {
+    theme = theme === 'siri' ? 'glow' : 'siri';
+    applyTheme();
+    toast('Theme: ' + THEMES[theme]);
+  }
+  $('theme').addEventListener('click', toggleTheme);
+  applyTheme();
+
+  /* ---------- Siri-style orb (canvas) ---------- */
+  const SIRI = {
+    focus: {
+      bg: ['#d8369a', '#4a2cb4', '#1d4fe0'], left: 'rgba(40, 110, 255, 0.55)', right: 'rgba(25, 200, 170, 0.55)',
+      petals: ['255,76,176', '40,230,190', '240,248,255', '80,150,255', '160,110,255', '110,225,255', '236,60,170', '230,240,255']
+    },
+    break: {
+      bg: ['#12b5c8', '#1f5fd6', '#2a35b8'], left: 'rgba(60, 120, 255, 0.55)', right: 'rgba(30, 220, 190, 0.55)',
+      petals: ['60,235,215', '60,170,255', '240,250,255', '90,130,255', '130,120,255', '120,235,255', '40,200,230', '230,245,255']
+    }
+  };
+  // a = angle (rad), L = length & w = width (fraction of radius), spin = rad/frame
+  const PETALS = [
+    { a: 1.45, L: 0.95, w: 0.12, spin: 0.0011, ph: 0.0 },
+    { a: 0.10, L: 0.85, w: 0.13, spin: -0.0014, ph: 1.1 },
+    { a: -1.15, L: 0.80, w: 0.09, spin: 0.0018, ph: 2.0 },
+    { a: 2.45, L: 0.85, w: 0.14, spin: -0.0012, ph: 3.2 },
+    { a: -2.50, L: 0.80, w: 0.20, spin: 0.0009, ph: 4.1 },
+    { a: -0.45, L: 0.70, w: 0.10, spin: 0.0021, ph: 5.0 },
+    { a: -1.70, L: 0.75, w: 0.15, spin: -0.0016, ph: 0.7 },
+    { a: 3.10, L: 0.65, w: 0.08, spin: 0.0015, ph: 2.6 }
+  ];
+
+  const canvas = $('orbCanvas');
+  const gfx = canvas.getContext('2d');
+  const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let clock = 120, energy = 0.6;
+
+  function fitCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.max(1, canvas.clientWidth * dpr);
+    canvas.height = Math.max(1, canvas.clientHeight * dpr);
+    gfx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe(canvas);
+  window.addEventListener('resize', fitCanvas);
+
+  function glow(x, y, r, color, w, h) {
+    const g = gfx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, color);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    gfx.fillStyle = g;
+    gfx.fillRect(0, 0, w, h);
+  }
+
+  let lastDraw = 0;
+  function drawOrb(now) {
+    if (theme !== 'siri') { setTimeout(() => requestAnimationFrame(drawOrb), 250); return; } // Glow theme has no canvas work
+    const ts = now || performance.now();
+    // Idle: draw at ~30 FPS to save CPU/GPU. Running: full speed.
+    if (!running && lastDraw && ts - lastDraw < 33) { requestAnimationFrame(drawOrb); return; }
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) { requestAnimationFrame(drawOrb); return; }
+    const dt = lastDraw ? Math.min(4, (ts - lastDraw) / 16.67) : 1; // keeps the speed the same on any refresh rate
+    lastDraw = ts;
+    energy += ((running ? 1 : 0.6) - energy) * Math.min(1, 0.05 * dt);
+    if (!still) clock += (running ? 2.2 : 1) * dt;
+    const t = clock, P = SIRI[mode];
+    const cx = w / 2, cy = h / 2, R = w / 2;
+
+    gfx.globalCompositeOperation = 'source-over';
+    gfx.clearRect(0, 0, w, h);
+    const base = gfx.createLinearGradient(0, 0, 0, h);
+    base.addColorStop(0, P.bg[0]); base.addColorStop(0.5, P.bg[1]); base.addColorStop(1, P.bg[2]);
+    gfx.fillStyle = base;
+    gfx.fillRect(0, 0, w, h);
+    glow(w * (0.84 + 0.03 * Math.sin(t * 0.012)), h * (0.62 + 0.03 * Math.cos(t * 0.01)), R * 0.75, P.right, w, h);
+    glow(w * (0.16 + 0.03 * Math.cos(t * 0.011)), h * (0.62 + 0.03 * Math.sin(t * 0.013)), R * 0.85, P.left, w, h);
+    const vig = gfx.createRadialGradient(cx, cy, R * 0.45, cx, cy, R);
+    vig.addColorStop(0, 'rgba(4,5,18,0)'); vig.addColorStop(1, 'rgba(4,5,18,0.78)');
+    gfx.fillStyle = vig;
+    gfx.fillRect(0, 0, w, h);
+
+    gfx.globalCompositeOperation = 'lighter';
+    PETALS.forEach((p, i) => {
+      const col = P.petals[i];
+      const angle = p.a + t * p.spin * 2.2 + Math.sin(t * 0.011 + p.ph) * 0.38;
+      const len = R * p.L * (0.82 + 0.18 * Math.sin(t * 0.017 + p.ph * 1.7)) * (0.92 + 0.12 * energy);
+      const wid = R * p.w * (0.85 + 0.3 * Math.sin(t * 0.014 + p.ph * 2.3));
+      gfx.save();
+      gfx.translate(cx, cy);
+      gfx.rotate(angle);
+      gfx.beginPath();
+      gfx.ellipse(len / 2, 0, len / 2, wid * 1.3, 0, 0, Math.PI * 2); // fully round at both ends
+      const g = gfx.createLinearGradient(0, 0, len, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0.75)');
+      g.addColorStop(0.3, `rgba(${col},0.6)`);
+      g.addColorStop(1, `rgba(${col},0.04)`);
+      gfx.fillStyle = g;
+      gfx.fill();
+      gfx.strokeStyle = `rgba(${col},0.28)`;
+      gfx.lineWidth = 1;
+      gfx.stroke();
+      gfx.restore();
+    });
+
+    const coreR = R * (0.2 + 0.03 * Math.sin(t * 0.03)) * (0.9 + 0.2 * energy);
+    const core = gfx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+    core.addColorStop(0, 'rgba(255,255,255,0.7)');
+    core.addColorStop(0.5, 'rgba(190,240,255,0.22)');
+    core.addColorStop(1, 'rgba(190,240,255,0)');
+    gfx.fillStyle = core;
+    gfx.beginPath();
+    gfx.arc(cx, cy, coreR, 0, Math.PI * 2);
+    gfx.fill();
+
+    gfx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(drawOrb);
+  }
+  fitCanvas();
+  requestAnimationFrame(drawOrb);
+
+  render('Ready');
+})();
+</script>
+</body>
+</html>
+
+  function fitCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.max(1, canvas.clientWidth * dpr);
+    canvas.height = Math.max(1, canvas.clientHeight * dpr);
+    gfx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe(canvas);
+  window.addEventListener('resize', fitCanvas);
+
+  function glow(x, y, r, color, w, h) {
+    const g = gfx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, color);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    gfx.fillStyle = g;
+    gfx.fillRect(0, 0, w, h);
+  }
+
+  let lastDraw = 0;
+  function drawOrb(now) {
+    if (theme !== 'siri') { setTimeout(() => requestAnimationFrame(drawOrb), 250); return; } // Glow theme has no canvas work
+    const ts = now || performance.now();
+    // Idle: draw at ~30 FPS to save CPU/GPU. Running: full speed.
+    if (!running && lastDraw && ts - lastDraw < 33) { requestAnimationFrame(drawOrb); return; }
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) { requestAnimationFrame(drawOrb); return; }
+    const dt = lastDraw ? Math.min(4, (ts - lastDraw) / 16.67) : 1; // keeps the speed the same on any refresh rate
+    lastDraw = ts;
+    energy += ((running ? 1 : 0.6) - energy) * Math.min(1, 0.05 * dt);
+    if (!still) clock += (running ? 2.2 : 1) * dt;
+    const t = clock, P = SIRI[mode];
+    const cx = w / 2, cy = h / 2, R = w / 2;
+
+    gfx.globalCompositeOperation = 'source-over';
+    gfx.clearRect(0, 0, w, h);
+    const base = gfx.createLinearGradient(0, 0, 0, h);
+    base.addColorStop(0, P.bg[0]); base.addColorStop(0.5, P.bg[1]); base.addColorStop(1, P.bg[2]);
+    gfx.fillStyle = base;
+    gfx.fillRect(0, 0, w, h);
+    glow(w * (0.84 + 0.03 * Math.sin(t * 0.012)), h * (0.62 + 0.03 * Math.cos(t * 0.01)), R * 0.75, P.right, w, h);
+    glow(w * (0.16 + 0.03 * Math.cos(t * 0.011)), h * (0.62 + 0.03 * Math.sin(t * 0.013)), R * 0.85, P.left, w, h);
+    const vig = gfx.createRadialGradient(cx, cy, R * 0.45, cx, cy, R);
+    vig.addColorStop(0, 'rgba(4,5,18,0)'); vig.addColorStop(1, 'rgba(4,5,18,0.78)');
+    gfx.fillStyle = vig;
+    gfx.fillRect(0, 0, w, h);
+
+    gfx.globalCompositeOperation = 'lighter';
+    PETALS.forEach((p, i) => {
+      const col = P.petals[i];
+      const angle = p.a + t * p.spin * 2.2 + Math.sin(t * 0.011 + p.ph) * 0.38;
+      const len = R * p.L * (0.82 + 0.18 * Math.sin(t * 0.017 + p.ph * 1.7)) * (0.92 + 0.12 * energy);
+      const wid = R * p.w * (0.85 + 0.3 * Math.sin(t * 0.014 + p.ph * 2.3));
+      gfx.save();
+      gfx.translate(cx, cy);
+      gfx.rotate(angle);
+      gfx.beginPath();
+      gfx.ellipse(len / 2, 0, len / 2, wid * 1.3, 0, 0, Math.PI * 2); // fully round at both ends
+      const g = gfx.createLinearGradient(0, 0, len, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0.75)');
+      g.addColorStop(0.3, `rgba(${col},0.6)`);
+      g.addColorStop(1, `rgba(${col},0.04)`);
+      gfx.fillStyle = g;
+      gfx.fill();
+      gfx.strokeStyle = `rgba(${col},0.28)`;
+      gfx.lineWidth = 1;
+      gfx.stroke();
+      gfx.restore();
+    });
+
+    const coreR = R * (0.2 + 0.03 * Math.sin(t * 0.03)) * (0.9 + 0.2 * energy);
+    const core = gfx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+    core.addColorStop(0, 'rgba(255,255,255,0.7)');
+    core.addColorStop(0.5, 'rgba(190,240,255,0.22)');
+    core.addColorStop(1, 'rgba(190,240,255,0)');
+    gfx.fillStyle = core;
+    gfx.beginPath();
+    gfx.arc(cx, cy, coreR, 0, Math.PI * 2);
+    gfx.fill();
+
+    gfx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(drawOrb);
+  }
+  fitCanvas();
+  requestAnimationFrame(drawOrb);
+
+  render('Ready');
+})();
+</script>
+</body>
+</html>
+
+  };
+  // a = angle (rad), L = length & w = width (fraction of radius), spin = rad/frame
+  const PETALS = [
+    { a: 1.45, L: 0.95, w: 0.12, spin: 0.0011, ph: 0.0 },
+    { a: 0.10, L: 0.85, w: 0.13, spin: -0.0014, ph: 1.1 },
+    { a: -1.15, L: 0.80, w: 0.09, spin: 0.0018, ph: 2.0 },
+    { a: 2.45, L: 0.85, w: 0.14, spin: -0.0012, ph: 3.2 },
+    { a: -2.50, L: 0.80, w: 0.20, spin: 0.0009, ph: 4.1 },
+    { a: -0.45, L: 0.70, w: 0.10, spin: 0.0021, ph: 5.0 },
+    { a: -1.70, L: 0.75, w: 0.15, spin: -0.0016, ph: 0.7 },
+    { a: 3.10, L: 0.65, w: 0.08, spin: 0.0015, ph: 2.6 }
+  ];
+
+  const canvas = $('orbCanvas');
+  const gfx = canvas.getContext('2d');
+  const still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let clock = 120, energy = 0.6;
+
+  function fitCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvas.width = Math.max(1, canvas.clientWidth * dpr);
+    canvas.height = Math.max(1, canvas.clientHeight * dpr);
+    gfx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe(canvas);
+  window.addEventListener('resize', fitCanvas);
+
+  function glow(x, y, r, color, w, h) {
+    const g = gfx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, color);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    gfx.fillStyle = g;
+    gfx.fillRect(0, 0, w, h);
+  }
+
+  let lastDraw = 0;
+  function drawOrb(now) {
+    if (theme !== 'siri') { setTimeout(() => requestAnimationFrame(drawOrb), 250); return; } // Glow theme has no canvas work
+    const ts = now || performance.now();
+    // Idle: draw at ~30 FPS to save CPU/GPU. Running: full speed.
+    if (!running && lastDraw && ts - lastDraw < 33) { requestAnimationFrame(drawOrb); return; }
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) { requestAnimationFrame(drawOrb); return; }
+    const dt = lastDraw ? Math.min(4, (ts - lastDraw) / 16.67) : 1; // keeps the speed the same on any refresh rate
+    lastDraw = ts;
+    energy += ((running ? 1 : 0.6) - energy) * Math.min(1, 0.05 * dt);
+    if (!still) clock += (running ? 2.2 : 1) * dt;
+    const t = clock, P = SIRI[mode];
+    const cx = w / 2, cy = h / 2, R = w / 2;
+
+    gfx.globalCompositeOperation = 'source-over';
+    gfx.clearRect(0, 0, w, h);
+    const base = gfx.createLinearGradient(0, 0, 0, h);
+    base.addColorStop(0, P.bg[0]); base.addColorStop(0.5, P.bg[1]); base.addColorStop(1, P.bg[2]);
+    gfx.fillStyle = base;
+    gfx.fillRect(0, 0, w, h);
+    glow(w * (0.84 + 0.03 * Math.sin(t * 0.012)), h * (0.62 + 0.03 * Math.cos(t * 0.01)), R * 0.75, P.right, w, h);
+    glow(w * (0.16 + 0.03 * Math.cos(t * 0.011)), h * (0.62 + 0.03 * Math.sin(t * 0.013)), R * 0.85, P.left, w, h);
+    const vig = gfx.createRadialGradient(cx, cy, R * 0.45, cx, cy, R);
+    vig.addColorStop(0, 'rgba(4,5,18,0)'); vig.addColorStop(1, 'rgba(4,5,18,0.78)');
+    gfx.fillStyle = vig;
+    gfx.fillRect(0, 0, w, h);
+
+    gfx.globalCompositeOperation = 'lighter';
+    PETALS.forEach((p, i) => {
+      const col = P.petals[i];
+      const angle = p.a + t * p.spin * 2.2 + Math.sin(t * 0.011 + p.ph) * 0.38;
+      const len = R * p.L * (0.82 + 0.18 * Math.sin(t * 0.017 + p.ph * 1.7)) * (0.92 + 0.12 * energy);
+      const wid = R * p.w * (0.85 + 0.3 * Math.sin(t * 0.014 + p.ph * 2.3));
+      gfx.save();
+      gfx.translate(cx, cy);
+      gfx.rotate(angle);
+      gfx.beginPath();
+      gfx.ellipse(len / 2, 0, len / 2, wid * 1.3, 0, 0, Math.PI * 2); // fully round at both ends
+      const g = gfx.createLinearGradient(0, 0, len, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0.75)');
+      g.addColorStop(0.3, `rgba(${col},0.6)`);
+      g.addColorStop(1, `rgba(${col},0.04)`);
+      gfx.fillStyle = g;
+      gfx.fill();
+      gfx.strokeStyle = `rgba(${col},0.28)`;
+      gfx.lineWidth = 1;
+      gfx.stroke();
+      gfx.restore();
+    });
+
+    const coreR = R * (0.2 + 0.03 * Math.sin(t * 0.03)) * (0.9 + 0.2 * energy);
+    const core = gfx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+    core.addColorStop(0, 'rgba(255,255,255,0.7)');
+    core.addColorStop(0.5, 'rgba(190,240,255,0.22)');
+    core.addColorStop(1, 'rgba(190,240,255,0)');
+    gfx.fillStyle = core;
+    gfx.beginPath();
+    gfx.arc(cx, cy, coreR, 0, Math.PI * 2);
+    gfx.fill();
+
+    gfx.globalCompositeOperation = 'source-over';
+    requestAnimationFrame(drawOrb);
+  }
+  fitCanvas();
+  requestAnimationFrame(drawOrb);
+
+  render('Ready');
+})();
+</script>
+</body>
+</html>
