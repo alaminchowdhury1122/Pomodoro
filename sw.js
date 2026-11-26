@@ -1,5 +1,5 @@
 // Pomodoro service worker (only touches its own 'pomodoro-*' caches; other apps on this origin keep theirs): network-first, so new pushes show up right away; cache is only the offline fallback.
-const CACHE = 'pomodoro-v1';
+const CACHE = 'pomodoro-v2';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -30,5 +30,13 @@ self.addEventListener('fetch', e => {
         return res;
       })
       .catch(() => caches.match(e.request).then(r => r || caches.match('index.html')))
+  );
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list =>
+      list.length ? list[0].focus() : self.clients.openWindow('./'))
   );
 });
