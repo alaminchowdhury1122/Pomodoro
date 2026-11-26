@@ -1,4 +1,4 @@
-// Pomodoro service worker: network-first, so new pushes show up right away; cache is only the offline fallback.
+// Pomodoro service worker (only touches its own 'pomodoro-*' caches; other apps on this origin keep theirs): network-first, so new pushes show up right away; cache is only the offline fallback.
 const CACHE = 'pomodoro-v1';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
@@ -13,7 +13,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k.startsWith('pomodoro-') && k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
