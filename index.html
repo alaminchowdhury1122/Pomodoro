@@ -1,7 +1,7 @@
  <!-- start the project to track time.  -->
  <!-- The main purpuse is to divide the time into blcok so that I can focus more  -->
 
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -749,6 +749,11 @@
     unlockAudio();
     stopAlarm();
     if (ctx) alarm = buildAlarm(ctx.currentTime + 0.05, mode, 1);
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') showNote('Test notification', 'If you can see this, notifications work.');
+      else if (Notification.permission === 'default') askNotify();
+      else { toast('Notifications are blocked. Allow them in site settings.'); return; }
+    }
     toast('Playing bell: Tong Tong Tong');
   });
   el.stage.addEventListener('click', () => {
@@ -807,21 +812,31 @@
   $('zen').addEventListener('click', toggleZen);
   $('fs').addEventListener('click', toggleFullscreen);
 
+  function showNote(title, body) {
+    try {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+      const opts = { body: body, icon: logoURI, tag: 'pomodoro', renotify: true };
+      const plain = () => { try { const n = new Notification(title, opts); n.onclick = () => { window.focus(); n.close(); }; } catch (e) {} };
+      if (navigator.serviceWorker && navigator.serviceWorker.getRegistration) {
+        navigator.serviceWorker.getRegistration().then(r => (r && r.showNotification) ? r.showNotification(title, opts) : plain()).catch(plain);
+      } else plain();
+      return true;
+    } catch (e) { return false; }
+  }
   function askNotify() {
     try {
-      if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+      if ('Notification' in window && Notification.permission === 'default') {
+        Promise.resolve(Notification.requestPermission()).then(p => {
+          if (p === 'granted') showNote('Notifications are on', 'You will see one here when a session ends.');
+        });
+      }
     } catch (e) {}
   }
   function notifyDone(finished) {
-    try {
-      if (!('Notification' in window) || Notification.permission !== 'granted' || document.hasFocus()) return;
-      const n = new Notification(finished === 'focus' ? 'Focus session done' : 'Break is over', {
-        body: finished === 'focus' ? 'Nice work. Take a ' + DURATION.break / 60000 + ' min break.' : 'Ready for the next focus session?',
-        icon: logoURI,
-        tag: 'aura-pomodoro'
-      });
-      n.onclick = () => { window.focus(); n.close(); };
-    } catch (e) {}
+    showNote(
+      finished === 'focus' ? 'Focus session done' : 'Break is over',
+      finished === 'focus' ? 'Nice work. Take a ' + DURATION.break / 60000 + ' min break.' : 'Ready for the next focus session?'
+    );
   }
 
   /* ---------- Theme switch (Siri / Glow) ---------- */
