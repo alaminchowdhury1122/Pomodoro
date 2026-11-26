@@ -7,7 +7,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#07060d">
-<title>Pomodoro · 25:00</title>
+<title>25:00</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link id="favicon" rel="icon" type="image/svg+xml" href="">
@@ -23,7 +23,7 @@
     --bg: #07060d;
     --text: #f6f3ff;
     --muted: rgba(246, 243, 255, 0.58);
-    --size: min(84vw, 46vh, 440px);
+    --size: min(84vw, max(180px, calc(100dvh - 400px)), 440px);
     --font: 'Sora', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
 
@@ -45,8 +45,8 @@
     flex-direction: column;
     align-items: center;
     justify-content: safe center;
-    gap: clamp(1.25rem, 4vh, 2.5rem);
-    padding: max(1.5rem, env(safe-area-inset-top)) 1.25rem max(1.5rem, env(safe-area-inset-bottom));
+    gap: clamp(0.6rem, 2vh, 1.25rem);
+    padding: max(1rem, env(safe-area-inset-top)) 1.25rem max(1rem, env(safe-area-inset-bottom));
     background:
       radial-gradient(ellipse 70% 55% at 50% 48%, color-mix(in srgb, var(--c3) 16%, transparent), transparent 70%),
       var(--bg);
@@ -86,6 +86,7 @@
 
   /* ---------- Orb ---------- */
   .stage {
+    flex-shrink: 0;
     position: relative;
     width: var(--size);
     height: var(--size);
@@ -151,16 +152,13 @@
   }
 
   /* Header, pills, toast */
-  .top { width: 100%; max-width: 54rem; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-  .brand { display: flex; align-items: center; gap: 0.6rem; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; }
-  .brand img { width: 2rem; height: 2rem; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.2); }
-  .brand small { font-weight: 300; letter-spacing: 0.06em; text-transform: none; color: var(--muted); }
-  .tools { display: flex; gap: 0.4rem; }
+  .top { width: 100%; max-width: 54rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
+  .tools { display: flex; gap: 0.35rem; }
   .pill {
     font: 400 0.78rem var(--font); color: var(--muted);
     background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 999px; padding: 0.5rem 0.85rem; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 0.4rem; backdrop-filter: blur(10px);
+    border-radius: 50%; width: 2.1rem; height: 2.1rem; padding: 0; justify-content: center; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 0; backdrop-filter: blur(10px);
     transition: color 0.2s, background 0.2s, opacity 0.3s;
   }
   .pill:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.11); }
@@ -169,8 +167,17 @@
   .hide { display: none; }
   .zenhint { display: none; position: fixed; left: 0; right: 0; bottom: max(1rem, env(safe-area-inset-bottom)); text-align: center; font-size: 0.75rem; color: var(--muted); opacity: 0.7; pointer-events: none; }
   /* Focus mode: only the orb and the time, scaled to the window */
-  body.zen { --size: min(92vw, 88vh); justify-content: center; gap: 0; }
+  body.zen { --size: min(92vw, 88vh); justify-content: center; gap: 0; overflow: hidden; }
   body.zen .top, body.zen .modes, body.zen .controls, body.zen .settings, body.zen .tally, body.zen .hint { display: none; }
+  /* Small window: automatically show only the ring and time, scaled to fill it */
+  @media (max-width: 400px), (max-height: 640px) {
+    body { --size: min(92vw, 88vh); justify-content: center; gap: 0; padding: 0.5rem; overflow: hidden; }
+    body .top, body .modes, body .controls, body .settings, body .tally, body .hint { display: none; }
+    body .stage { cursor: pointer; }
+    body #time { font-size: calc(var(--size) * 0.19); }
+    body #label { font-size: calc(var(--size) * 0.05); }
+    body #status { font-size: calc(var(--size) * 0.035); }
+  }
   body.zen .stage { cursor: pointer; }
   body.zen .zenhint { display: block; }
   body.zen #time { font-size: calc(var(--size) * 0.19); }
@@ -187,7 +194,7 @@
     transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
-  @media (max-width: 520px) { .pill .t, .brand small { display: none; } .pill { padding: 0.55rem 0.7rem; } }
+  .pill .t { display: none; }
 
   /* Theme: Glow (soft blobs). Hidden, and not animating, while the Siri theme is on */
   .blob {
@@ -389,13 +396,10 @@
 <body data-mode="focus" data-theme="siri">
 
   <header class="top">
-    <div class="brand"><img id="logoImg" alt="Aura logo"><span>Aura <small>· Pomodoro</small></span></div>
     <div class="tools">
       <button class="pill" id="zen" type="button" aria-pressed="false" title="Focus mode (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><span class="t">Focus mode</span></button>
       <button class="pill" id="theme" type="button" title="Switch theme (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor"/></svg><span class="t">Theme: <b id="theme-name">Flower</b></span></button>
       <button class="pill" id="fs" type="button" title="Fullscreen (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="t">Full</span></button>
-      <button class="pill" id="dl-png" type="button" title="Download 512x512 PNG logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg><span class="t">Logo PNG</span></button>
-      <button class="pill" id="dl-svg" type="button" title="Download SVG logo">SVG</button>
       <button class="pill" id="test" type="button" title="Preview the bell alarm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 00-4-5.7V5a2 2 0 10-4 0v.3C7.7 6.2 6 8.4 6 11v3.2c0 .5-.2 1.1-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg><span class="t">Bell</span></button>
       <button class="pill" id="mute" type="button" aria-label="Mute alarm" title="Mute or unmute the alarm">
         <svg id="ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5zM15.5 8.5a5 5 0 010 7M19 5a10 10 0 010 14"/></svg>
@@ -457,8 +461,8 @@
       <button type="button" class="five" data-m="break" data-d="5" aria-label="Increase break by 5 minutes">+5</button>
     </div>
   </section>
-  <p class="tally">Completed focus sessions <b id="done">0</b></p>
-  <p class="hint">Space start/pause · R reset · F fullscreen · Z focus mode · T theme</p>
+  <p class="tally">Sessions <b id="done">0</b></p>
+  <p class="hint">S start · R reset · B break · F full · Z zen · T theme</p>
   <p class="zenhint">Click the orb to start or pause · Z to exit · F for fullscreen</p>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -581,7 +585,7 @@
     const text = fmt(remaining);
     el.time.textContent = text;
     el.label.textContent = LABEL[mode];
-    document.title = text + ' · ' + LABEL[mode];
+    document.title = text;
     document.body.dataset.mode = mode;
     el.mFocus.setAttribute('aria-pressed', mode === 'focus');
     el.mBreak.setAttribute('aria-pressed', mode === 'break');
@@ -704,6 +708,8 @@
   });
   window.addEventListener('blur', stopHold);
 
+  const compactMQ = window.matchMedia('(max-width: 400px), (max-height: 640px)');
+
   /* ---------- Events ---------- */
   el.main.addEventListener('click', () => (running ? pause() : start()));
   el.reset.addEventListener('click', resetTimer);
@@ -715,6 +721,11 @@
     if (e.code === 'Space' && e.target.tagName !== 'BUTTON') {
       e.preventDefault();
       running ? pause() : start();
+    } else if (e.key.toLowerCase() === 's') {
+      running ? pause() : start();
+    } else if (e.key.toLowerCase() === 'b') {
+      unlockAudio();
+      setMode(mode === 'break' ? 'focus' : 'break');
     } else if (e.key.toLowerCase() === 'r') {
       resetTimer();
     } else if (e.key.toLowerCase() === 'f') {
@@ -742,7 +753,7 @@
       stopAlarm();
       if (wasAuto) start(); else el.status.textContent = 'Ready';
     }
-    else if (document.body.classList.contains('zen')) { running ? pause() : start(); }
+    else if (document.body.classList.contains('zen') || compactMQ.matches) { running ? pause() : start(); }
   });
   el.stage.addEventListener('dblclick', () => toggleFullscreen());
   document.addEventListener('pointerdown', unlockAudio, { passive: true });
@@ -790,38 +801,7 @@
 </svg>`;
   }
   const logoURI = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(logoSVG());
-  $('logoImg').src = logoURI;
   $('favicon').href = logoURI;
-
-  function saveFile(url, name) {
-    const a = document.createElement('a');
-    a.href = url; a.download = name;
-    document.body.appendChild(a); a.click(); a.remove();
-  }
-  $('dl-svg').addEventListener('click', () => {
-    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
-    saveFile(url, 'aura-siri-orb-logo.svg');
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
-    toast('Downloaded aura-siri-orb-logo.svg');
-  });
-  $('dl-png').addEventListener('click', () => {
-    const url = URL.createObjectURL(new Blob([logoSVG()], { type: 'image/svg+xml;charset=utf-8' }));
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = c.height = 512;
-      c.getContext('2d').drawImage(img, 0, 0, 512, 512);
-      URL.revokeObjectURL(url);
-      c.toBlob(b => {
-        if (!b) return;
-        const u = URL.createObjectURL(b);
-        saveFile(u, 'aura-siri-orb-logo-512x512.png');
-        setTimeout(() => URL.revokeObjectURL(u), 1500);
-        toast('Downloaded 512×512 PNG logo');
-      }, 'image/png');
-    };
-    img.src = url;
-  });
 
   function paintMute() {
     $('ic-on').classList.toggle('hide', muted);
