@@ -1,8 +1,6 @@
  <!-- start the project to track time.  -->
  <!-- The main purpuse is to divide the time into blcok so that I can focus more  -->
 
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -394,7 +392,7 @@
     <div class="brand"><img id="logoImg" alt="Aura logo"><span>Aura <small>· Pomodoro</small></span></div>
     <div class="tools">
       <button class="pill" id="zen" type="button" aria-pressed="false" title="Focus mode (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><span class="t">Focus mode</span></button>
-      <button class="pill" id="theme" type="button" title="Switch theme (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor"/></svg><span class="t">Theme: <b id="theme-name">Siri</b></span></button>
+      <button class="pill" id="theme" type="button" title="Switch theme (T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 000 18z" fill="currentColor"/></svg><span class="t">Theme: <b id="theme-name">Flower</b></span></button>
       <button class="pill" id="fs" type="button" title="Fullscreen (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span class="t">Full</span></button>
       <button class="pill" id="dl-png" type="button" title="Download 512x512 PNG logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg><span class="t">Logo PNG</span></button>
       <button class="pill" id="dl-svg" type="button" title="Download SVG logo">SVG</button>
@@ -476,6 +474,12 @@
     }
   } catch (e) {}
   const LABEL = { focus: 'Focus', break: 'Break' };
+  // After a session ends and the bell has rung, start the next one automatically.
+  // Change a value to false if you want to press Start yourself.
+  const AUTO_NEXT = { focus: true, break: false };   // focus ends -> break auto-starts
+  const ALARM_MS = 9500;                              // bell = 3 rounds
+  let autoT = null;
+  function cancelAuto() { clearTimeout(autoT); autoT = null; }
   const C = 2 * Math.PI * 46;
 
   const $ = id => document.getElementById(id);
@@ -607,6 +611,7 @@
   }
 
   function start() {
+    cancelAuto();
     unlockAudio();
     askNotify();
     ringDone = false;
@@ -619,6 +624,7 @@
   }
 
   function pause() {
+    cancelAuto();
     stopAlarm();
     remaining = Math.max(0, endAt - Date.now());
     running = false;
@@ -627,6 +633,7 @@
   }
 
   function resetTimer() {
+    cancelAuto();
     stopAlarm();
     ringDone = false;
     running = false;
@@ -651,7 +658,8 @@
     ringT = setTimeout(() => { ringDone = false; render(); }, 2200);
     mode = finished === 'focus' ? 'break' : 'focus';
     remaining = DURATION[mode];
-    render(finished === 'focus' ? 'Focus done · tap to silence' : 'Break done · tap to silence');
+    const auto = AUTO_NEXT[finished];
+    render(LABEL[finished] + ' done · ' + (auto ? 'tap to start ' + LABEL[mode].toLowerCase() + ' now' : 'tap to silence'));
     notifyDone(finished);
     // Normally the chime was already scheduled at Start; rebuild it only if that did not work
     if (!(alarm && ctx && ctx.state === 'running')) {
@@ -661,7 +669,9 @@
     }
     el.stage.classList.add('alarm');
     clearTimeout(alarmTimeout);
-    alarmTimeout = setTimeout(stopAlarm, 9500);
+    alarmTimeout = setTimeout(stopAlarm, ALARM_MS);
+    cancelAuto();
+    if (auto) autoT = setTimeout(() => { autoT = null; if (!running) start(); }, ALARM_MS + 150);
     if (navigator.vibrate) navigator.vibrate([250, 120, 250, 120, 400]);
   }
 
@@ -671,6 +681,7 @@
     const [lo, hi] = LIMITS[m];
     const v = Math.min(hi, Math.max(lo, DURATION[m] / 60000 + d));
     if (v * 60000 === DURATION[m]) return;
+    cancelAuto();
     DURATION[m] = v * 60000;
     try {
       localStorage.setItem('pomodoro-minutes', JSON.stringify({ focus: DURATION.focus / 60000, break: DURATION.break / 60000 }));
@@ -726,7 +737,11 @@
     toast('Playing bell: Tong Tong Tong');
   });
   el.stage.addEventListener('click', () => {
-    if (alarm || el.stage.classList.contains('alarm')) { stopAlarm(); el.status.textContent = 'Ready'; }
+    if (alarm || el.stage.classList.contains('alarm')) {
+      const wasAuto = autoT !== null;
+      stopAlarm();
+      if (wasAuto) start(); else el.status.textContent = 'Ready';
+    }
     else if (document.body.classList.contains('zen')) { running ? pause() : start(); }
   });
   el.stage.addEventListener('dblclick', () => toggleFullscreen());
@@ -855,7 +870,7 @@
   }
 
   /* ---------- Theme switch (Siri / Glow) ---------- */
-  const THEMES = { siri: 'Siri', glow: 'Glow' };
+  const THEMES = { siri: 'Flower', glow: 'Glow' };
   let theme = 'siri';
   try { const t = localStorage.getItem('pomodoro-theme'); if (THEMES[t]) theme = t; } catch (e) {}
   function applyTheme() {
